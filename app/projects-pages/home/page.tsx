@@ -245,7 +245,7 @@ export default function HomePage() {
 
             <aside className="space-y-3" dir="rtl">
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 shadow-sm sm:p-4">
-                <div className="flex items-center justify-between text-blue-900">
+                <div className="flex items-center gap-3 text-blue-900">
                   <div className="rounded-full bg-blue-200/60 p-2">
                     <svg
                       aria-hidden="true"
@@ -269,7 +269,7 @@ export default function HomePage() {
               </div>
 
               <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 shadow-sm sm:p-4">
-                <div className="flex items-center justify-between text-yellow-900">
+                <div className="flex items-center gap-3 text-yellow-900">
                   <div className="rounded-full bg-yellow-200/70 p-2">
                     <svg
                       aria-hidden="true"
@@ -292,7 +292,7 @@ export default function HomePage() {
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 shadow-sm sm:p-4">
-                  <div className="flex items-center justify-between text-emerald-900">
+                  <div className="flex items-center gap-3 text-emerald-900">
                     <div className="rounded-full bg-emerald-200/70 p-2">
                       <svg
                         aria-hidden="true"
@@ -314,7 +314,7 @@ export default function HomePage() {
                 </div>
 
                 <div className="rounded-lg border border-slate-200 bg-slate-100 p-3 shadow-sm sm:p-4">
-                  <div className="flex items-center justify-between text-slate-700">
+                  <div className="flex items-center gap-3 text-slate-700">
                     <div className="rounded-full bg-slate-200/70 p-2">
                       <svg
                         aria-hidden="true"
@@ -337,7 +337,7 @@ export default function HomePage() {
               </div>
 
               <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 shadow-sm sm:p-4">
-                <div className="flex items-center justify-between text-rose-900">
+                <div className="flex items-center gap-3 text-rose-900">
                   <div className="rounded-full bg-rose-200/70 p-2">
                     <svg
                       aria-hidden="true"
