@@ -1,4 +1,4 @@
-﻿import Sidebar from "../../components/Sidebar";
+import Sidebar from "../../components/Sidebar";
 import ThemeToggle from "../../components/ThemeToggle";
 import SidebarToggle from "../../components/SidebarToggle";
 
@@ -19,7 +19,7 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
       <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-6">
+        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
           <div className="flex items-center gap-3 text-slate-200">
             <SidebarToggle />
           </div>
@@ -27,8 +27,8 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <div className="flex w-full gap-5 px-6 py-6" dir="ltr">
-        <main className="flex-1 space-y-4" dir="rtl">
+      <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
+        <main className="min-w-0 flex-1 space-y-4" dir="rtl">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="text-right text-lg font-semibold text-slate-700">
               الإعدادات

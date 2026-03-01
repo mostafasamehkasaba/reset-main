@@ -60,8 +60,8 @@ export default function Sidebar({ activeLabel }: SidebarProps) {
         aria-hidden="true"
       />
       <aside
-        className={`fixed inset-y-0 right-0 z-50 w-72 translate-x-full overflow-y-auto bg-white transition duration-200 lg:static lg:block lg:w-60 lg:translate-x-0 ${
-          open ? "translate-x-0" : ""
+        className={`fixed inset-y-0 right-0 z-50 w-72 overflow-y-auto bg-white transition duration-200 lg:static lg:block lg:h-full lg:w-60 lg:translate-x-0 ${
+          open ? "translate-x-0" : "translate-x-full"
         }`}
         dir="rtl"
       >

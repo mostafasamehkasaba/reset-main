@@ -113,9 +113,9 @@ const chartOptions = {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen w-full bg-slate-100 text-slate-800">
+    <div className="flex h-dvh w-full flex-col bg-slate-100 text-slate-800">
       <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-6">
+        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
           <div className="flex items-center gap-3 text-slate-200">
             <SidebarToggle />
           </div>
@@ -123,9 +123,15 @@ export default function HomePage() {
         </div>
       </header>
 
-      <div className="flex w-full gap-5 px-6 pt-6" dir="ltr">
-        <main className="flex-1 space-y-4" dir="rtl">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div
+        className="flex min-h-0 w-full flex-1 gap-0 px-3 pt-4 sm:px-4 sm:pt-6 lg:gap-5 lg:px-6"
+        dir="ltr"
+      >
+        <main
+          className="min-w-0 flex-1 space-y-4 overflow-y-auto pb-4 sm:pb-6"
+          dir="rtl"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm sm:px-4 sm:py-3">
             <div className="flex items-center gap-3 text-slate-600">
               <button
                 className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm shadow-sm"
@@ -147,11 +153,11 @@ export default function HomePage() {
           </div>
 
           <div
-            className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]"
+            className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]"
             dir="ltr"
           >
             <section
-              className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+              className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"
               dir="rtl"
             >
               <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
@@ -170,12 +176,15 @@ export default function HomePage() {
                     </svg>
                   </button>
                 </div>
-                <div className="flex items-center gap-4" dir="rtl">
+                <div
+                  className="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto sm:gap-4"
+                  dir="rtl"
+                >
                   <div className="flex items-center gap-2">
                     <span>الشهر</span>
                     <div className="relative">
                       <select
-                        className="appearance-none rounded-md border border-slate-200 bg-white px-3 py-1 pl-8 text-sm"
+                        className="w-28 appearance-none rounded-md border border-slate-200 bg-white px-3 py-1 pl-8 text-sm"
                         aria-label="الشهر"
                         defaultValue="09"
                       >
@@ -209,7 +218,7 @@ export default function HomePage() {
               <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
                   <div className="font-semibold text-slate-700">ريال عماني</div>
-                  <div className="flex items-center gap-4 text-xs">
+                  <div className="flex w-full flex-wrap items-center gap-3 text-xs sm:w-auto sm:gap-4">
                     <span className="flex items-center gap-2">
                       <span className="h-2 w-2 rounded-full bg-[#1e88e5]" />
                       الفواتير
@@ -227,7 +236,7 @@ export default function HomePage() {
                 </div>
 
                 <div className="mt-3">
-                  <div className="h-72 lg:h-80">
+                  <div className="h-56 sm:h-72 lg:h-80">
                     <Line data={chartData} options={chartOptions} />
                   </div>
                 </div>
@@ -235,7 +244,7 @@ export default function HomePage() {
             </section>
 
             <aside className="space-y-3" dir="rtl">
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 shadow-sm">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 shadow-sm sm:p-4">
                 <div className="flex items-center justify-between text-blue-900">
                   <div className="rounded-full bg-blue-200/60 p-2">
                     <svg
@@ -251,7 +260,7 @@ export default function HomePage() {
                     </svg>
                   </div>
                   <div className="text-right">
-                    <div className="text-3xl font-bold">19</div>
+                    <div className="text-2xl font-bold sm:text-3xl">19</div>
                     <div className="text-xs text-blue-800">
                       الفواتير - من أصل 30
                     </div>
@@ -259,7 +268,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 shadow-sm">
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 shadow-sm sm:p-4">
                 <div className="flex items-center justify-between text-yellow-900">
                   <div className="rounded-full bg-yellow-200/70 p-2">
                     <svg
@@ -282,7 +291,7 @@ export default function HomePage() {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 shadow-sm sm:p-4">
                   <div className="flex items-center justify-between text-emerald-900">
                     <div className="rounded-full bg-emerald-200/70 p-2">
                       <svg
@@ -304,9 +313,9 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-slate-200 bg-slate-100 p-4 shadow-sm">
+                <div className="rounded-lg border border-slate-200 bg-slate-100 p-3 shadow-sm sm:p-4">
                   <div className="flex items-center justify-between text-slate-700">
-                    <div className="rounded-full bg-slate-200-70 p-2">
+                    <div className="rounded-full bg-slate-200/70 p-2">
                       <svg
                         aria-hidden="true"
                         viewBox="0 0 24 24"
@@ -327,7 +336,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 shadow-sm">
+              <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 shadow-sm sm:p-4">
                 <div className="flex items-center justify-between text-rose-900">
                   <div className="rounded-full bg-rose-200/70 p-2">
                     <svg
@@ -350,15 +359,15 @@ export default function HomePage() {
               </div>
             </aside>
           </div>
+
+          <div className="pt-0.5" dir="rtl">
+            <div className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-center text-xs text-slate-500 shadow-sm">
+              جميع الحقوق محفوظة فاتورة+ © 2024 - بواسطة ديفر
+            </div>
+          </div>
         </main>
 
         <Sidebar activeLabel="لوحة البيانات" />
-      </div>
-
-      <div className="px-6 pb-6" dir="rtl">
-        <div className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-center text-xs text-slate-500 shadow-sm">
-          جميع الحقوق محفوظة فاتورة+ © 2024 - بواسطة ديفر
-        </div>
       </div>
     </div>
   );

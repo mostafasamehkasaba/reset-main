@@ -80,7 +80,7 @@ export default function SubCategoriesPage() {
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
       <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-6">
+        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
           <div className="flex items-center gap-3 text-slate-200">
             <SidebarToggle />
           </div>
@@ -88,8 +88,8 @@ export default function SubCategoriesPage() {
         </div>
       </header>
 
-      <div className="flex w-full gap-5 px-6 py-6" dir="ltr">
-        <main className="flex-1 space-y-4" dir="rtl">
+      <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
+        <main className="min-w-0 flex-1 space-y-4" dir="rtl">
           <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-sm text-slate-500">إجمالي التصنيفات الفرعية</p>
@@ -135,14 +135,14 @@ export default function SubCategoriesPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full border-separate border-spacing-0 text-right text-sm">
+              <table className="w-full min-w-[720px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
-                    <th className="px-3 py-3 text-center">#</th>
-                    <th className="px-3 py-3 text-right">اسم التصنيف</th>
-                    <th className="px-3 py-3 text-center">التصنيف الأساسي</th>
-                    <th className="px-3 py-3 text-center">المنتجات</th>
-                    <th className="px-3 py-3 text-center">الحالة</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">#</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-right">اسم التصنيف</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">التصنيف الأساسي</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">المنتجات</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الحالة</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -155,13 +155,13 @@ export default function SubCategoriesPage() {
                   ) : (
                     filteredSubCategories.map((category, index) => (
                       <tr key={category.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                        <td className="px-3 py-3 text-center text-slate-700">{category.id}</td>
-                        <td className="px-3 py-3 text-right font-semibold text-slate-800">{category.name}</td>
-                        <td className="px-3 py-3 text-center text-slate-600">
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{category.id}</td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">{category.name}</td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
                           {mainById[category.mainCategoryId] ?? "-"}
                         </td>
-                        <td className="px-3 py-3 text-center text-slate-700">{category.products}</td>
-                        <td className="px-3 py-3 text-center">
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{category.products}</td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center">
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-semibold ${
                               category.status === "نشط"

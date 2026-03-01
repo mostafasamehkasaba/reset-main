@@ -11,7 +11,7 @@ export default function SidebarToggle({ className }: SidebarToggleProps) {
       type="button"
       onClick={toggle}
       className={[
-        "rounded-md p-1 transition hover:bg-white/10",
+        "rounded-md p-1 transition hover:bg-white/10 lg:hidden",
         className,
       ]
         .filter(Boolean)

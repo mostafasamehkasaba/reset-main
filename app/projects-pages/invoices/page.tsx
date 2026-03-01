@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 import Sidebar from "../../components/Sidebar";
@@ -233,7 +233,7 @@ export default function InvoicesPage() {
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
       <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-6">
+        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
           <div className="flex items-center gap-3 text-slate-200">
             <button
               className="rounded-md p-1 transition hover:bg-white/10"
@@ -273,8 +273,8 @@ export default function InvoicesPage() {
         </div>
       </header>
 
-      <div className="flex w-full gap-5 px-6 py-6" dir="ltr">
-        <main className="flex-1 space-y-4" dir="rtl">
+      <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
+        <main className="min-w-0 flex-1 space-y-4" dir="rtl">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="flex items-center gap-2">
               <a
@@ -310,22 +310,22 @@ export default function InvoicesPage() {
 
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" dir="rtl">
             <div className="overflow-x-auto">
-              <table className="min-w-full border-separate border-spacing-0 text-right text-sm">
+              <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
-                    <th className="px-3 py-3 text-center">#</th>
-                    <th className="px-3 py-3 text-center">رقم الفاتورة</th>
-                    <th className="px-3 py-3 text-center">المنتجات</th>
-                    <th className="px-3 py-3 text-center">الإجمالي</th>
-                    <th className="px-3 py-3 text-center">المدفوع</th>
-                    <th className="px-3 py-3 text-center">الخصم</th>
-                    <th className="px-3 py-3 text-center">المستحق</th>
-                    <th className="px-3 py-3 text-center">العملة</th>
-                    <th className="px-3 py-3 text-center">الحالة</th>
-                    <th className="px-3 py-3 text-center">التاريخ</th>
-                    <th className="px-3 py-3 text-center">تاريخ الاستحقاق</th>
-                    <th className="px-3 py-3 text-center">العميل</th>
-                    <th className="px-3 py-3 text-center" aria-label="الإجراءات">
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">#</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">رقم الفاتورة</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">المنتجات</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الإجمالي</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">المدفوع</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الخصم</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">المستحق</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">العملة</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الحالة</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">التاريخ</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">تاريخ الاستحقاق</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">العميل</th>
+                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center" aria-label="الإجراءات">
                       …
                     </th>
                   </tr>
@@ -336,31 +336,31 @@ export default function InvoicesPage() {
                       key={invoice.id}
                       className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}
                     >
-                      <td className="px-3 py-3 text-center text-slate-700">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
                         {invoice.num}
                       </td>
-                      <td className="px-3 py-3 text-center font-semibold text-slate-800">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center font-semibold text-slate-800">
                         {invoice.id}
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-600">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
                         {invoice.products}
                       </td>
-                      <td className="px-3 py-3 text-center font-semibold text-emerald-700">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center font-semibold text-emerald-700">
                         {invoice.total}
                       </td>
-                      <td className="px-3 py-3 text-center font-semibold text-sky-600">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center font-semibold text-sky-600">
                         {invoice.paid}
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-600">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
                         {invoice.discount}
                       </td>
-                      <td className="px-3 py-3 text-center font-semibold text-rose-600">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center font-semibold text-rose-600">
                         {invoice.due}
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-700">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
                         {invoice.currency}
                       </td>
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center">
                         <span
                           className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-semibold ${
                             statusStyles[invoice.status] ??
@@ -370,16 +370,16 @@ export default function InvoicesPage() {
                           {invoice.status}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-600">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
                         {invoice.date}
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-600">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
                         {invoice.dueDate}
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-700">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
                         {invoice.client}
                       </td>
-                      <td className="px-3 py-3 text-center text-slate-500">
+                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-500">
                         <button
                           type="button"
                           onClick={() => setOpenId(invoice.id)}

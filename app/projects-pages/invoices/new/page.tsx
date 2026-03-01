@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import Sidebar from "../../../components/Sidebar";
 import SidebarToggle from "../../../components/SidebarToggle";
 
@@ -12,7 +12,7 @@ export default function NewInvoicePage() {
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
       <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-6">
+        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
           <div className="flex items-center gap-3 text-slate-200">
             <button
               className="rounded-md p-1 transition hover:bg-white/10"
@@ -52,8 +52,8 @@ export default function NewInvoicePage() {
         </div>
       </header>
 
-      <div className="flex w-full gap-5 px-6 py-6" dir="ltr">
-        <main className="flex-1 space-y-4" dir="rtl">
+      <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
+        <main className="min-w-0 flex-1 space-y-4" dir="rtl">
           <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="text-right text-lg font-semibold text-slate-700">
               فاتورة جديدة
@@ -164,28 +164,28 @@ export default function NewInvoicePage() {
               </div>
 
               <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-                <table className="min-w-full text-right text-sm">
+                <table className="w-full min-w-[640px] text-right text-xs sm:text-sm">
                   <thead className="bg-slate-50 text-slate-600">
                     <tr>
-                      <th className="px-3 py-3">المنتج</th>
-                      <th className="px-3 py-3 text-center">السعر</th>
-                      <th className="px-3 py-3 text-center">الكمية</th>
-                      <th className="px-3 py-3 text-center">الإجمالي</th>
+                      <th className="px-2 py-2 sm:px-3 sm:py-3">المنتج</th>
+                      <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">السعر</th>
+                      <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الكمية</th>
+                      <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الإجمالي</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item) => (
                       <tr key={item.name} className="border-t border-slate-200">
-                        <td className="px-3 py-3 font-semibold text-slate-700">
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 font-semibold text-slate-700">
                           {item.name}
                         </td>
-                        <td className="px-3 py-3 text-center text-slate-600">
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
                           {item.price}
                         </td>
-                        <td className="px-3 py-3 text-center text-slate-600">
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
                           {item.qty}
                         </td>
-                        <td className="px-3 py-3 text-center font-semibold text-slate-700">
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center font-semibold text-slate-700">
                           {item.total}
                         </td>
                       </tr>
