@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import Sidebar from "../../components/Sidebar";
-import SidebarToggle from "../../components/SidebarToggle";
+import TopNav from "../../components/TopNav";
 
 const methods = [
   {
@@ -18,33 +19,32 @@ const methods = [
 
 export default function PaymentMethodsPage() {
   const [query, setQuery] = useState("");
+  const [methodsList, setMethodsList] = useState(methods);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [deleteMethodId, setDeleteMethodId] = useState<number | null>(null);
   const filteredMethods = useMemo(() => {
     const q = query.trim();
-    if (!q) return methods;
-    return methods.filter(
+    if (!q) return methodsList;
+    return methodsList.filter(
       (method) =>
         method.name.includes(q) ||
         method.desc.includes(q) ||
         method.total.includes(q) ||
         String(method.id).includes(q)
     );
-  }, [query]);
+  }, [query, methodsList]);
   const selectedMethod = useMemo(
-    () => methods.find((method) => method.id === openId) ?? null,
-    [openId]
+    () => methodsList.find((method) => method.id === openId) ?? null,
+    [openId, methodsList]
+  );
+  const selectedDeleteMethod = useMemo(
+    () => methodsList.find((method) => method.id === deleteMethodId) ?? null,
+    [deleteMethodId, methodsList]
   );
 
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
-      <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
-          <div className="flex items-center gap-3 text-slate-200">
-            <SidebarToggle />
-          </div>
-          <div className="text-right text-base font-semibold">فاتورة+</div>
-        </div>
-      </header>
+      <TopNav currentLabel="وسائل الدفع" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
@@ -57,7 +57,7 @@ export default function PaymentMethodsPage() {
               >
                 جديد +
               </Link>
-              <div className="flex items-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm">
+              <div className="app-search">
                 <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">
                   <svg
                     aria-hidden="true"
@@ -72,7 +72,7 @@ export default function PaymentMethodsPage() {
                   </svg>
                 </span>
                 <input
-                  className="h-10 w-44 px-3 text-sm outline-none"
+                  className="app-search-input h-10 w-44 px-3 text-sm outline-none"
                   placeholder="بحث"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
@@ -170,7 +170,7 @@ export default function PaymentMethodsPage() {
                 className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700 hover:bg-rose-100"
                 type="button"
                 onClick={() => {
-                  alert("تم حذف الوسيلة (واجهة فقط)");
+                  setDeleteMethodId(selectedMethod.id);
                   setOpenId(null);
                 }}
               >
@@ -180,6 +180,22 @@ export default function PaymentMethodsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDeleteModal
+        open={deleteMethodId !== null}
+        title="تأكيد حذف وسيلة الدفع"
+        message={
+          selectedDeleteMethod
+            ? `هل تريد حذف الوسيلة "${selectedDeleteMethod.name}"؟`
+            : "هل تريد حذف وسيلة الدفع؟"
+        }
+        onClose={() => setDeleteMethodId(null)}
+        onConfirm={() => {
+          if (deleteMethodId === null) return;
+          setMethodsList((prev) => prev.filter((method) => method.id !== deleteMethodId));
+          setDeleteMethodId(null);
+        }}
+      />
     </div>
   );
 }

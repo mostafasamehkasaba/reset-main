@@ -13,7 +13,7 @@ import {
 import { Line } from "react-chartjs-2";
 import Sidebar from "../../../components/Sidebar";
 import { clients } from "../data";
-import SidebarToggle from "../../../components/SidebarToggle";
+import TopNav from "../../../components/TopNav";
 import type { ClientViewPageProps } from "../../../types";
 
 ChartJS.register(
@@ -95,14 +95,7 @@ export default function ClientViewPage({ params }: ClientViewPageProps) {
 
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
-      <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
-          <div className="flex items-center gap-3 text-slate-200">
-            <SidebarToggle />
-          </div>
-          <div className="text-right text-base font-semibold">فاتورة+</div>
-        </div>
-      </header>
+      <TopNav currentLabel="العملاء" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
@@ -111,7 +104,7 @@ export default function ClientViewPage({ params }: ClientViewPageProps) {
               <button className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm">◀</button>
               <span className="text-sm font-semibold">{currency}</span>
               <button className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm">▶</button>
-              <div className="flex items-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm">
+              <div className="app-search">
                 <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">
                   <svg
                     aria-hidden="true"
@@ -125,7 +118,7 @@ export default function ClientViewPage({ params }: ClientViewPageProps) {
                     <path d="M20 20l-3.5-3.5" />
                   </svg>
                 </span>
-                <input className="h-10 w-40 px-3 text-sm outline-none" placeholder="بحث" />
+                <input className="app-search-input h-10 w-40 px-3 text-sm outline-none" placeholder="بحث" />
               </div>
             </div>
             <div className="text-right text-lg font-semibold text-slate-700">

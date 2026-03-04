@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import Sidebar from "../../components/Sidebar";
-import SidebarToggle from "../../components/SidebarToggle";
+import TopNav from "../../components/TopNav";
 import type { AppUser, UserRole, UserStatus } from "../../types";
 
 const initialUsers: AppUser[] = [
@@ -42,6 +43,7 @@ export default function UsersPage() {
   const [openActionId, setOpenActionId] = useState<number | null>(null);
   const [viewUserId, setViewUserId] = useState<number | null>(null);
   const [editUserId, setEditUserId] = useState<number | null>(null);
+  const [deleteUserId, setDeleteUserId] = useState<number | null>(null);
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
@@ -81,6 +83,10 @@ export default function UsersPage() {
   const selectedViewUser = useMemo(
     () => users.find((user) => user.id === viewUserId) ?? null,
     [users, viewUserId]
+  );
+  const selectedDeleteUser = useMemo(
+    () => users.find((user) => user.id === deleteUserId) ?? null,
+    [users, deleteUserId]
   );
 
   const handleAddUser = (event: FormEvent<HTMLFormElement>) => {
@@ -146,9 +152,6 @@ export default function UsersPage() {
   };
 
   const handleDeleteUser = (userId: number) => {
-    const shouldDelete = window.confirm("هل تريد حذف المستخدم؟");
-    if (!shouldDelete) return;
-
     setUsers((prev) => prev.filter((user) => user.id !== userId));
     setOpenActionId(null);
     if (viewUserId === userId) setViewUserId(null);
@@ -157,14 +160,7 @@ export default function UsersPage() {
 
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
-      <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
-          <div className="flex items-center gap-3 text-slate-200">
-            <SidebarToggle />
-          </div>
-          <div className="text-right text-base font-semibold">فاتورة+</div>
-        </div>
-      </header>
+      <TopNav currentLabel="المستخدمين" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
@@ -193,10 +189,10 @@ export default function UsersPage() {
               >
                 إضافة مستخدم +
               </button>
-              <div className="flex items-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm">
+              <div className="app-search">
                 <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">🔍</span>
                 <input
-                  className="h-10 w-52 px-3 text-sm outline-none"
+                  className="app-search-input h-10 w-52 px-3 text-sm outline-none"
                   placeholder="ابحث عن مستخدم"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
@@ -320,7 +316,10 @@ export default function UsersPage() {
               <button
                 type="button"
                 className="w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700 hover:bg-rose-100"
-                onClick={() => handleDeleteUser(selectedActionUser.id)}
+                onClick={() => {
+                  setDeleteUserId(selectedActionUser.id);
+                  setOpenActionId(null);
+                }}
               >
                 حذف
               </button>
@@ -586,6 +585,22 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDeleteModal
+        open={deleteUserId !== null}
+        title="تأكيد حذف المستخدم"
+        message={
+          selectedDeleteUser
+            ? `هل تريد حذف المستخدم "${selectedDeleteUser.name}"؟`
+            : "هل تريد حذف هذا المستخدم؟"
+        }
+        onClose={() => setDeleteUserId(null)}
+        onConfirm={() => {
+          if (deleteUserId === null) return;
+          handleDeleteUser(deleteUserId);
+          setDeleteUserId(null);
+        }}
+      />
     </div>
   );
 }

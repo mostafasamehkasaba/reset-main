@@ -33,14 +33,25 @@ export type SidebarToggleProps = {
 export type Theme = "light" | "dark";
 
 export type EntityStatus = "نشط" | "معلّق";
+export type SupplierStatus = "نشط" | "موقوف" | "مؤرشف";
 
 export type Supplier = {
   id: number;
   name: string;
   email: string;
   phone: string;
+  country: string;
   city: string;
-  status: EntityStatus;
+  address: string;
+  taxNumber: string;
+  paymentTermDays: 30 | 60;
+  creditLimit: number;
+  openingBalance: number;
+  bankAccountNumber: string;
+  bankName: string;
+  iban: string;
+  status: SupplierStatus;
+  notes: string;
   balance: number;
   orders: number;
   joinedAt: string;

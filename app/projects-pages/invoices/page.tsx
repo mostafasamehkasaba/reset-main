@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import Sidebar from "../../components/Sidebar";
-import SidebarToggle from "../../components/SidebarToggle";
+import TopNav from "../../components/TopNav";
 
 const invoices = [
   {
@@ -224,87 +225,60 @@ const statusStyles: Record<string, string> = {
 };
 
 export default function InvoicesPage() {
+  const [invoicesList, setInvoicesList] = useState(invoices);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [deleteInvoiceId, setDeleteInvoiceId] = useState<string | null>(null);
   const selectedInvoice = useMemo(
-    () => invoices.find((invoice) => invoice.id === openId) ?? null,
-    [openId]
+    () => invoicesList.find((invoice) => invoice.id === openId) ?? null,
+    [openId, invoicesList]
+  );
+  const selectedDeleteInvoice = useMemo(
+    () => invoicesList.find((invoice) => invoice.id === deleteInvoiceId) ?? null,
+    [deleteInvoiceId, invoicesList]
   );
 
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
-      <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
-          <div className="flex items-center gap-3 text-slate-200">
-            <button
-              className="rounded-md p-1 transition hover:bg-white/10"
-              aria-label="الصفحة الرئيسية"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <path d="M3 11.5L12 4l9 7.5" />
-                <path d="M6 10v10h12V10" />
-              </svg>
-            </button>
-            <button
-              className="rounded-md p-1 transition hover:bg-white/10"
-              aria-label="المستخدم"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <circle cx="12" cy="8" r="3.5" />
-                <path d="M4.5 20c1.8-3 5-4.5 7.5-4.5s5.7 1.5 7.5 4.5" />
-              </svg>
-            </button>
-            <SidebarToggle />
-          </div>
-          <div className="text-right text-base font-semibold">فاتورة+</div>
-        </div>
-      </header>
+      <TopNav currentLabel="الفواتير" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <a
-                href="/projects-pages/invoices/new"
-                className="rounded-full bg-brand-800 px-4 py-2 text-sm text-white shadow-sm"
-              >
-                جديد +
-              </a>
-              <div className="flex items-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm">
-                <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  >
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-3.5-3.5" />
-                  </svg>
-                </span>
-                <input
-                  className="h-10 w-48 px-3 text-sm outline-none"
-                  placeholder="بحث"
-                />
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-3">
+              <div className="text-right md:justify-self-start">
+                <p className="text-lg font-semibold text-slate-700">الفواتير</p>
               </div>
-            </div>
-            <div className="text-right">
-              <p className="text-lg font-semibold text-slate-700">الفواتير</p>
+
+              <div className="w-full md:justify-self-center">
+                <div className="app-search mx-auto w-full max-w-md">
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-800 text-white shadow-sm">
+                    <svg
+                      aria-hidden="true"
+                      viewBox="0 0 24 24"
+                      className="h-4 w-4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                    >
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M20 20l-3.5-3.5" />
+                    </svg>
+                  </span>
+                  <input
+                    className="app-search-input h-10 w-full px-2 text-sm outline-none"
+                    placeholder="ابحث عن فاتورة بالرقم أو العميل"
+                  />
+                </div>
+              </div>
+
+              <div className="md:justify-self-end">
+                <a
+                  href="/projects-pages/invoices/new"
+                  className="inline-flex rounded-full bg-brand-800 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-brand-900"
+                >
+                  إضافة فاتورة جديدة
+                </a>
+              </div>
             </div>
           </div>
 
@@ -331,7 +305,7 @@ export default function InvoicesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {invoices.map((invoice, index) => (
+                  {invoicesList.map((invoice, index) => (
                     <tr
                       key={invoice.id}
                       className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}
@@ -479,7 +453,7 @@ export default function InvoicesPage() {
                 className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700 hover:bg-rose-100"
                 type="button"
                 onClick={() => {
-                  alert("تم حذف الفاتورة (واجهة فقط)");
+                  setDeleteInvoiceId(selectedInvoice.id);
                   setOpenId(null);
                 }}
               >
@@ -489,6 +463,22 @@ export default function InvoicesPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDeleteModal
+        open={deleteInvoiceId !== null}
+        title="تأكيد حذف الفاتورة"
+        message={
+          selectedDeleteInvoice
+            ? `هل تريد حذف الفاتورة رقم "${selectedDeleteInvoice.id}"؟`
+            : "هل تريد حذف هذه الفاتورة؟"
+        }
+        onClose={() => setDeleteInvoiceId(null)}
+        onConfirm={() => {
+          if (deleteInvoiceId === null) return;
+          setInvoicesList((prev) => prev.filter((invoice) => invoice.id !== deleteInvoiceId));
+          setDeleteInvoiceId(null);
+        }}
+      />
     </div>
   );
 }

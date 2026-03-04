@@ -1,6 +1,6 @@
 import Sidebar from "../../components/Sidebar";
 import ThemeToggle from "../../components/ThemeToggle";
-import SidebarToggle from "../../components/SidebarToggle";
+import TopNav from "../../components/TopNav";
 
 const toolbarItems = ["B", "I", "U", "S", "•", "❐", "◉", "↺", "↻"];
 
@@ -18,14 +18,7 @@ export default function SettingsPage() {
 
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
-      <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
-          <div className="flex items-center gap-3 text-slate-200">
-            <SidebarToggle />
-          </div>
-          <div className="text-right text-base font-semibold">فاتورة+</div>
-        </div>
-      </header>
+      <TopNav currentLabel="الإعدادات" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">

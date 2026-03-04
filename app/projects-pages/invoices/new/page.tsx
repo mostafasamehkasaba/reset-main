@@ -1,228 +1,1028 @@
-import Link from "next/link";
-import Sidebar from "../../../components/Sidebar";
-import SidebarToggle from "../../../components/SidebarToggle";
+﻿"use client";
 
-const items = [
-  { name: "قالب ووردبريس", price: 20, qty: 1, total: 20 },
-  { name: "تصميم موقع", price: 30, qty: 1, total: 30 },
-  { name: "إعداد سيرفر", price: 50, qty: 1, total: 50 },
+import Link from "next/link";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import ConfirmDeleteModal from "../../../components/ConfirmDeleteModal";
+import Sidebar from "../../../components/Sidebar";
+import TopNav from "../../../components/TopNav";
+import { loadProductsFromStorage, type Product } from "../../../lib/product-store";
+import { clients } from "../../clients/data";
+
+type InvoiceItemType = "product" | "service";
+type DiscountType = "percent" | "amount";
+type PaymentMethod = "cash" | "transfer" | "card" | "credit";
+type PaymentStatus = "مسودة" | "مدفوعة" | "غير مدفوعة" | "مدفوعة جزئيا" | "ملغاة";
+
+type InvoiceItem = {
+  id: number;
+  itemType: InvoiceItemType;
+  productId: number | null;
+  name: string;
+  price: number;
+  quantity: number;
+  discountType: DiscountType;
+  discountValue: number;
+  taxRate: number;
+};
+
+type LineTotals = {
+  base: number;
+  discount: number;
+  tax: number;
+  total: number;
+};
+
+const INVOICE_SEQUENCE_KEY = "reset-main-invoice-sequence-v1";
+const todayDate = () => new Date().toISOString().slice(0, 10);
+
+const formatInvoiceNumber = (sequence: number) =>
+  `INV-${String(Math.max(1, sequence)).padStart(4, "0")}`;
+
+const toPositiveNumber = (value: string, fallback = 0) => {
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(0, parsed);
+};
+
+const calculateLineTotals = (item: InvoiceItem): LineTotals => {
+  const safePrice = Math.max(0, item.price);
+  const safeQuantity = Math.max(1, item.quantity);
+  const base = safePrice * safeQuantity;
+
+  const rawDiscount =
+    item.discountType === "percent"
+      ? (base * Math.max(0, item.discountValue)) / 100
+      : Math.max(0, item.discountValue);
+  const discount = Math.min(base, rawDiscount);
+  const taxable = Math.max(0, base - discount);
+  const tax = (taxable * Math.max(0, item.taxRate)) / 100;
+
+  return {
+    base,
+    discount,
+    tax,
+    total: taxable + tax,
+  };
+};
+
+const makeProductRow = (
+  id: number,
+  products: Product[],
+  defaultTaxRate: number
+): InvoiceItem => {
+  const firstProduct = products[0];
+  if (!firstProduct) {
+    return {
+      id,
+      itemType: "product",
+      productId: null,
+      name: "",
+      price: 0,
+      quantity: 1,
+      discountType: "percent",
+      discountValue: 0,
+      taxRate: defaultTaxRate,
+    };
+  }
+
+  return {
+    id,
+    itemType: "product",
+    productId: firstProduct.id,
+    name: firstProduct.name,
+    price: firstProduct.sellingPrice,
+    quantity: 1,
+    discountType: "percent",
+    discountValue: 0,
+    taxRate:
+      firstProduct.taxMode === "none" ? 0 : Math.max(0, firstProduct.defaultTaxRate),
+  };
+};
+
+const makeServiceRow = (id: number, defaultTaxRate: number): InvoiceItem => ({
+  id,
+  itemType: "service",
+  productId: null,
+  name: "",
+  price: 0,
+  quantity: 1,
+  discountType: "percent",
+  discountValue: 0,
+  taxRate: defaultTaxRate,
+});
+
+const paymentMethods: Array<{ value: PaymentMethod; label: string }> = [
+  { value: "cash", label: "نقدي" },
+  { value: "transfer", label: "تحويل" },
+  { value: "card", label: "شبكة" },
+  { value: "credit", label: "آجل" },
 ];
 
+const paymentStatuses: PaymentStatus[] = [
+  "مسودة",
+  "مدفوعة",
+  "غير مدفوعة",
+  "مدفوعة جزئيا",
+  "ملغاة",
+];
+
+const currencies: Array<{ code: string; label: string }> = [
+  { code: "OMR", label: "ريال عماني" },
+  { code: "SAR", label: "ريال سعودي" },
+  { code: "USD", label: "دولار" },
+  { code: "QAR", label: "ريال قطري" },
+];
+
+const formatMoney = (value: number) => value.toFixed(2);
+
+const escapeHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
 export default function NewInvoicePage() {
-  return (
-    <div className="min-h-screen w-full bg-slate-100 text-slate-800">
-      <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
-          <div className="flex items-center gap-3 text-slate-200">
-            <button
-              className="rounded-md p-1 transition hover:bg-white/10"
-              aria-label="الصفحة الرئيسية"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <path d="M3 11.5L12 4l9 7.5" />
-                <path d="M6 10v10h12V10" />
-              </svg>
-            </button>
-            <button
-              className="rounded-md p-1 transition hover:bg-white/10"
-              aria-label="المستخدم"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <circle cx="12" cy="8" r="3.5" />
-                <path d="M4.5 20c1.8-3 5-4.5 7.5-4.5s5.7 1.5 7.5 4.5" />
-              </svg>
-            </button>
-            <SidebarToggle />
-          </div>
-          <div className="text-right text-base font-semibold">فاتورة+</div>
+  const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
+  const [currency, setCurrency] = useState("OMR");
+  const [issueDate, setIssueDate] = useState(todayDate());
+  const [dueDate, setDueDate] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("مسودة");
+  const [defaultTaxRate, setDefaultTaxRate] = useState("15");
+  const [notes, setNotes] = useState("");
+  const [invoiceSequence, setInvoiceSequence] = useState(1);
+  const [invoiceNumber, setInvoiceNumber] = useState("INV-0001");
+  const [nextLineId, setNextLineId] = useState(1);
+  const [lineItems, setLineItems] = useState<InvoiceItem[]>([
+    makeServiceRow(1, 15),
+  ]);
+  const [deleteRowId, setDeleteRowId] = useState<number | null>(null);
+  const [showClientMenu, setShowClientMenu] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState<number | null>(null);
+  const [clientEmail, setClientEmail] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [clientAddress, setClientAddress] = useState("");
+  const [contractFile, setContractFile] = useState<File | null>(null);
+  const [designFile, setDesignFile] = useState<File | null>(null);
+  const [purchaseOrderFile, setPurchaseOrderFile] = useState<File | null>(null);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [validationMessage, setValidationMessage] = useState("");
+
+  useEffect(() => {
+    const loadedProducts = loadProductsFromStorage();
+    setAvailableProducts(loadedProducts);
+
+    const defaultRow = makeProductRow(1, loadedProducts, toPositiveNumber(defaultTaxRate, 0));
+    setLineItems([defaultRow]);
+    setNextLineId(2);
+
+    const storedSequence = Number.parseInt(
+      window.localStorage.getItem(INVOICE_SEQUENCE_KEY) ?? "0",
+      10
+    );
+    const safeSequence = Number.isFinite(storedSequence) ? Math.max(0, storedSequence) : 0;
+    const newSequence = safeSequence + 1;
+    setInvoiceSequence(newSequence);
+    setInvoiceNumber(formatInvoiceNumber(newSequence));
+  }, []);
+
+  const selectedClient = useMemo(
+    () => clients.find((client) => client.id === selectedClientId) ?? null,
+    [selectedClientId]
+  );
+
+  const filteredClients = useMemo(() => {
+    const query = clientSearch.trim();
+    if (!query) {
+      return clients;
+    }
+    return clients.filter((client) => {
+      return (
+        client.name.includes(query) ||
+        client.email.includes(query) ||
+        client.phone.includes(query)
+      );
+    });
+  }, [clientSearch]);
+
+  const summary = useMemo(() => {
+    return lineItems.reduce(
+      (totals, item) => {
+        const line = calculateLineTotals(item);
+        return {
+          subtotal: totals.subtotal + line.base,
+          discount: totals.discount + line.discount,
+          tax: totals.tax + line.tax,
+          grandTotal: totals.grandTotal + line.total,
+        };
+      },
+      { subtotal: 0, discount: 0, tax: 0, grandTotal: 0 }
+    );
+  }, [lineItems]);
+
+  const selectedDeleteRow = useMemo(
+    () => lineItems.find((item) => item.id === deleteRowId) ?? null,
+    [lineItems, deleteRowId]
+  );
+
+  const isOverdue =
+    paymentMethod === "credit" &&
+    dueDate !== "" &&
+    dueDate < todayDate() &&
+    paymentStatus !== "مدفوعة" &&
+    paymentStatus !== "ملغاة";
+
+  const selectClient = (clientId: number) => {
+    const client = clients.find((entry) => entry.id === clientId);
+    if (!client) {
+      return;
+    }
+    setSelectedClientId(client.id);
+    setClientSearch(client.name);
+    setClientEmail(client.email);
+    setClientPhone(client.phone);
+    setClientAddress(client.address);
+    setCurrency(client.currency);
+    setShowClientMenu(false);
+  };
+
+  const addProductRow = () => {
+    const row = makeProductRow(
+      nextLineId,
+      availableProducts,
+      toPositiveNumber(defaultTaxRate, 0)
+    );
+    setLineItems((current) => [...current, row]);
+    setNextLineId((current) => current + 1);
+  };
+
+  const addServiceRow = () => {
+    const row = makeServiceRow(nextLineId, toPositiveNumber(defaultTaxRate, 0));
+    setLineItems((current) => [...current, row]);
+    setNextLineId((current) => current + 1);
+  };
+
+  const updateRow = (rowId: number, updater: (row: InvoiceItem) => InvoiceItem) => {
+    setLineItems((current) => current.map((row) => (row.id === rowId ? updater(row) : row)));
+  };
+
+  const removeRow = (rowId: number) => {
+    setLineItems((current) => {
+      if (current.length === 1) {
+        return current;
+      }
+      return current.filter((row) => row.id !== rowId);
+    });
+  };
+
+  const handleProductSelection = (rowId: number, productIdText: string) => {
+    const productId = Number.parseInt(productIdText, 10);
+    if (!Number.isFinite(productId)) {
+      return;
+    }
+    const product = availableProducts.find((entry) => entry.id === productId);
+    if (!product) {
+      return;
+    }
+
+    updateRow(rowId, (row) => ({
+      ...row,
+      productId: product.id,
+      name: product.name,
+      price: product.sellingPrice,
+      taxRate: product.taxMode === "none" ? 0 : Math.max(0, product.defaultTaxRate),
+    }));
+  };
+
+  const resetForNextInvoice = () => {
+    const nextSequence = invoiceSequence + 1;
+    setInvoiceSequence(nextSequence);
+    setInvoiceNumber(formatInvoiceNumber(nextSequence));
+    window.localStorage.setItem(INVOICE_SEQUENCE_KEY, String(invoiceSequence));
+    setPaymentStatus("مسودة");
+    setPaymentMethod("cash");
+    setIssueDate(todayDate());
+    setDueDate("");
+    setNotes("");
+    setSelectedClientId(null);
+    setClientSearch("");
+    setClientEmail("");
+    setClientPhone("");
+    setClientAddress("");
+    setContractFile(null);
+    setDesignFile(null);
+    setPurchaseOrderFile(null);
+    setLineItems([makeProductRow(1, availableProducts, toPositiveNumber(defaultTaxRate, 0))]);
+    setNextLineId(2);
+  };
+
+  const buildPrintableDocument = (mode: "print" | "pdf") => {
+    const dueText = paymentMethod === "credit" ? dueDate || "-" : "-";
+    const itemsHtml = lineItems
+      .map((item) => {
+        const line = calculateLineTotals(item);
+        const discountLabel =
+          item.discountType === "percent"
+            ? `${item.discountValue.toFixed(2)}%`
+            : `${formatMoney(item.discountValue)} ${currency}`;
+        return `
+          <tr>
+            <td>${escapeHtml(item.name || "بدون اسم")}</td>
+            <td>${item.quantity}</td>
+            <td>${formatMoney(item.price)}</td>
+            <td>${discountLabel}</td>
+            <td>${item.taxRate.toFixed(2)}%</td>
+            <td>${formatMoney(line.total)}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const attachments = [contractFile, designFile, purchaseOrderFile]
+      .filter((file): file is File => file !== null)
+      .map((file) => `<li>${escapeHtml(file.name)}</li>`)
+      .join("");
+
+    const attachmentSection =
+      attachments.length > 0 ? `<h4>المرفقات</h4><ul>${attachments}</ul>` : "";
+
+    return `<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <title>${mode === "pdf" ? "PDF" : "Print"} - ${escapeHtml(invoiceNumber)}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #1f2937; }
+      .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+      .logoWrap { display: flex; align-items: center; gap: 10px; }
+      .logoWrap img { width: 44px; height: 44px; border-radius: 10px; background: #f1f5f9; padding: 8px; }
+      .badge { padding: 6px 12px; border-radius: 9999px; background: #eef2ff; border: 1px solid #c7d2fe; }
+      .card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+      .muted { color: #64748b; font-size: 12px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: right; font-size: 13px; }
+      th { background: #f8fafc; }
+      .summary { margin-top: 10px; width: 280px; margin-inline-start: auto; }
+      .summary div { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
+      .summary div:last-child { border-bottom: 0; font-weight: bold; color: #166534; }
+      ul { margin: 8px 0 0; padding: 0 18px 0 0; }
+      h4 { margin: 12px 0 6px; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div class="head">
+      <div class="logoWrap">
+        <img src="${window.location.origin}/globe.svg" alt="Logo" />
+        <div>
+          <div style="font-weight:700;">فاتورة+</div>
+          <div class="muted">تصميم فاتورة رسمي</div>
         </div>
-      </header>
+      </div>
+      <div class="badge">${escapeHtml(invoiceNumber)}</div>
+    </div>
+
+    <div class="card">
+      <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;">
+        <div>
+          <div class="muted">العميل</div>
+          <div>${escapeHtml(selectedClient?.name ?? "غير محدد")}</div>
+        </div>
+        <div>
+          <div class="muted">البريد</div>
+          <div>${escapeHtml(clientEmail || "-")}</div>
+        </div>
+        <div>
+          <div class="muted">الهاتف</div>
+          <div>${escapeHtml(clientPhone || "-")}</div>
+        </div>
+        <div>
+          <div class="muted">حالة الدفع</div>
+          <div>${escapeHtml(paymentStatus)}</div>
+        </div>
+        <div>
+          <div class="muted">تاريخ الإصدار</div>
+          <div>${escapeHtml(issueDate)}</div>
+        </div>
+        <div>
+          <div class="muted">الاستحقاق</div>
+          <div>${escapeHtml(dueText)}</div>
+        </div>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>البند</th>
+          <th>الكمية</th>
+          <th>السعر</th>
+          <th>الخصم</th>
+          <th>الضريبة</th>
+          <th>الإجمالي</th>
+        </tr>
+      </thead>
+      <tbody>${itemsHtml}</tbody>
+    </table>
+
+    <div class="summary">
+      <div><span>الإجمالي</span><span>${formatMoney(summary.subtotal)} ${currency}</span></div>
+      <div><span>الخصم</span><span>${formatMoney(summary.discount)} ${currency}</span></div>
+      <div><span>الضريبة</span><span>${formatMoney(summary.tax)} ${currency}</span></div>
+      <div><span>الإجمالي النهائي</span><span>${formatMoney(summary.grandTotal)} ${currency}</span></div>
+    </div>
+
+    <div class="card" style="margin-top:10px;">
+      <div class="muted">ملاحظات</div>
+      <div>${escapeHtml(notes || "-")}</div>
+      ${attachmentSection}
+    </div>
+  </body>
+</html>`;
+  };
+
+  const openPrintWindow = (mode: "print" | "pdf") => {
+    const popup = window.open("", "_blank", "width=1100,height=800");
+    if (!popup) {
+      setValidationMessage("تعذر فتح نافذة الطباعة. تأكد من السماح بالنوافذ المنبثقة.");
+      return;
+    }
+
+    popup.document.open();
+    popup.document.write(buildPrintableDocument(mode));
+    popup.document.close();
+    popup.focus();
+    window.setTimeout(() => {
+      popup.print();
+      if (mode === "print") {
+        popup.close();
+      }
+    }, 250);
+  };
+
+  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setValidationMessage("");
+    setSaveMessage("");
+
+    if (!selectedClient) {
+      setValidationMessage("يجب اختيار العميل من القائمة.");
+      return;
+    }
+    if (lineItems.length === 0) {
+      setValidationMessage("أضف منتجًا أو خدمة واحدة على الأقل.");
+      return;
+    }
+    if (lineItems.some((item) => !item.name.trim())) {
+      setValidationMessage("كل سطر يجب أن يحتوي على اسم منتج أو خدمة.");
+      return;
+    }
+    if (paymentMethod === "credit" && !dueDate) {
+      setValidationMessage("حدد تاريخ الاستحقاق لأن طريقة الدفع آجل.");
+      return;
+    }
+
+    setSaveMessage(`تم حفظ الفاتورة ${invoiceNumber} بنجاح.`);
+    resetForNextInvoice();
+  };
+
+  return (
+    <div className="min-h-screen w-full overflow-x-hidden bg-slate-100 text-slate-800">
+      <TopNav currentLabel="الفواتير" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
-          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">
-              فاتورة جديدة
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="text-right">
+              <p className="text-lg font-semibold text-slate-700">فاتورة جديدة</p>
+              <p className="text-xs text-slate-500">رقم تلقائي: {invoiceNumber}</p>
             </div>
-            <Link
-              href="/projects-pages/invoices"
-              className="rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-600"
-            >
-              رجوع
-            </Link>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => openPrintWindow("print")}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              >
+                طباعة
+              </button>
+              <button
+                type="button"
+                onClick={() => openPrintWindow("pdf")}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+              >
+                تحميل PDF
+              </button>
+              <Link
+                href="/projects-pages/invoices"
+                className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-600"
+              >
+                رجوع
+              </Link>
+            </div>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-[260px_1fr]">
-            <aside className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <form
+            onSubmit={onSubmit}
+            className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]"
+          >
+            <aside className="min-w-0 space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">
-                  العملة
-                </label>
-                <select className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
-                  <option>ريال سعودي</option>
-                  <option>ريال عُماني</option>
-                  <option>دولار</option>
+                <label className="text-sm font-semibold text-slate-700">رقم الفاتورة</label>
+                <input
+                  readOnly
+                  value={invoiceNumber}
+                  className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">العملة</label>
+                <select
+                  value={currency}
+                  onChange={(event) => setCurrency(event.target.value)}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  {currencies.map((entry) => (
+                    <option key={entry.code} value={entry.code}>
+                      {entry.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">تاريخ الإصدار</label>
+                <input
+                  type="date"
+                  value={issueDate}
+                  onChange={(event) => setIssueDate(event.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">طريقة الدفع</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(event) => {
+                    const value = event.target.value as PaymentMethod;
+                    setPaymentMethod(value);
+                    if (value !== "credit") {
+                      setDueDate("");
+                    }
+                  }}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  {paymentMethods.map((method) => (
+                    <option key={method.value} value={method.value}>
+                      {method.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">تاريخ الاستحقاق</label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(event) => setDueDate(event.target.value)}
+                  disabled={paymentMethod !== "credit"}
+                  className={`w-full rounded-md border px-3 py-2 text-sm ${
+                    paymentMethod !== "credit"
+                      ? "cursor-not-allowed border-slate-200 bg-slate-100"
+                      : isOverdue
+                        ? "border-rose-300 bg-rose-50 text-rose-700"
+                        : "border-slate-200"
+                  }`}
+                />
+                {isOverdue ? (
+                  <p className="text-xs font-semibold text-rose-700">
+                    تنبيه: تاريخ الاستحقاق متأخر.
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-semibold text-slate-700">حالة الدفع</label>
+                <select
+                  value={paymentStatus}
+                  onChange={(event) => setPaymentStatus(event.target.value as PaymentStatus)}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  {paymentStatuses.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
                 </select>
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-700">
-                  تاريخ الإصدار
+                  ضريبة افتراضية للسطر الجديد (%)
                 </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    defaultValue="28/09/2024"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                    📅
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">
-                  تاريخ الاستحقاق
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    defaultValue="01/10/2024"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  />
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                    📅
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">
-                  الحالة
-                </label>
-                <select className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm">
-                  <option>غير مدفوع</option>
-                  <option>مدفوع</option>
-                  <option>مدفوع جزئيًا</option>
-                </select>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={defaultTaxRate}
+                  onChange={(event) => setDefaultTaxRate(event.target.value)}
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                />
               </div>
             </aside>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <section className="min-w-0 space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-12 w-12 place-items-center rounded-lg bg-white shadow-sm">
+                      <img src="/globe.svg" alt="شعار" className="h-7 w-7" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">فاتورة+</p>
+                      <p className="text-xs text-slate-500">تصميم فاتورة رسمي بالشعار</p>
+                    </div>
+                  </div>
+                  <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">
+                    {invoiceNumber}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-700">
-                    اسم العميل
+                    اختيار العميل (بحث سريع)
                   </label>
-                  <input
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="مثال: أحمد سعيد"
-                  />
+                  <div className="relative">
+                    <input
+                      value={clientSearch}
+                      onFocus={() => setShowClientMenu(true)}
+                      onChange={(event) => {
+                        setClientSearch(event.target.value);
+                        setShowClientMenu(true);
+                      }}
+                      onBlur={() => {
+                        window.setTimeout(() => {
+                          setShowClientMenu(false);
+                          if (selectedClient && clientSearch !== selectedClient.name) {
+                            setClientSearch(selectedClient.name);
+                          }
+                        }, 150);
+                      }}
+                      className="app-search-input w-full px-3 py-2 text-sm"
+                      placeholder="ابحث باسم العميل أو الهاتف"
+                    />
+                    {showClientMenu ? (
+                      <div className="absolute z-20 mt-1 max-h-52 w-full overflow-auto rounded-md border border-slate-200 bg-white shadow-lg">
+                        {filteredClients.length > 0 ? (
+                          filteredClients.map((client) => (
+                            <button
+                              key={client.id}
+                              type="button"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => selectClient(client.id)}
+                              className="w-full border-b border-slate-100 px-3 py-2 text-right text-sm hover:bg-slate-50"
+                            >
+                              <p className="font-semibold text-slate-700">{client.name}</p>
+                              <p className="text-xs text-slate-500">
+                                {client.phone} - {client.email}
+                              </p>
+                            </button>
+                          ))
+                        ) : (
+                          <p className="px-3 py-2 text-sm text-slate-500">لا توجد نتائج.</p>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
+
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    البريد الإلكتروني
-                  </label>
+                  <label className="text-sm font-semibold text-slate-700">البريد الإلكتروني</label>
                   <input
+                    value={clientEmail}
+                    onChange={(event) => setClientEmail(event.target.value)}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                     placeholder="example@example.com"
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    الهاتف
-                  </label>
+                  <label className="text-sm font-semibold text-slate-700">الهاتف</label>
                   <input
+                    value={clientPhone}
+                    onChange={(event) => setClientPhone(event.target.value)}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="+966 50 000 0000"
+                    placeholder="+966 5x xxx xxxx"
                   />
                 </div>
+
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    العنوان
-                  </label>
+                  <label className="text-sm font-semibold text-slate-700">العنوان</label>
                   <input
+                    value={clientAddress}
+                    onChange={(event) => setClientAddress(event.target.value)}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="الرياض"
+                    placeholder="عنوان العميل"
                   />
                 </div>
               </div>
 
-              <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-                <table className="w-full min-w-[640px] text-right text-xs sm:text-sm">
-                  <thead className="bg-slate-50 text-slate-600">
-                    <tr>
-                      <th className="px-2 py-2 sm:px-3 sm:py-3">المنتج</th>
-                      <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">السعر</th>
-                      <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الكمية</th>
-                      <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الإجمالي</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item) => (
-                      <tr key={item.name} className="border-t border-slate-200">
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 font-semibold text-slate-700">
-                          {item.name}
-                        </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
-                          {item.price}
-                        </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
-                          {item.qty}
-                        </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center font-semibold text-slate-700">
-                          {item.total}
-                        </td>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-sm font-bold text-slate-700">المنتجات والخدمات</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={addProductRow}
+                    className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                  >
+                    إضافة منتج
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addServiceRow}
+                    className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                  >
+                    إضافة خدمة
+                  </button>
+                </div>
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[980px] text-right text-xs sm:text-sm">
+                    <thead className="bg-slate-50 text-slate-600">
+                      <tr>
+                        <th className="px-2 py-2">النوع</th>
+                        <th className="px-2 py-2">المنتج / الخدمة</th>
+                        <th className="px-2 py-2 text-center">السعر</th>
+                        <th className="px-2 py-2 text-center">الكمية</th>
+                        <th className="px-2 py-2 text-center">الخصم</th>
+                        <th className="px-2 py-2 text-center">قيمة الخصم</th>
+                        <th className="px-2 py-2 text-center">الضريبة %</th>
+                        <th className="px-2 py-2 text-center">الإجمالي</th>
+                        <th className="px-2 py-2 text-center">حذف</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {lineItems.map((row) => {
+                        const lineTotals = calculateLineTotals(row);
+                        return (
+                          <tr key={row.id} className="border-t border-slate-200">
+                            <td className="px-2 py-2">
+                              <select
+                                value={row.itemType}
+                                onChange={(event) => {
+                                  const value = event.target.value as InvoiceItemType;
+                                  if (value === "product") {
+                                    updateRow(row.id, () =>
+                                      makeProductRow(
+                                        row.id,
+                                        availableProducts,
+                                        toPositiveNumber(defaultTaxRate, 0)
+                                      )
+                                    );
+                                    return;
+                                  }
+                                  updateRow(row.id, () =>
+                                    makeServiceRow(row.id, toPositiveNumber(defaultTaxRate, 0))
+                                  );
+                                }}
+                                className="w-full rounded-md border border-slate-200 bg-white px-2 py-1"
+                              >
+                                <option value="product">منتج</option>
+                                <option value="service">خدمة</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-2">
+                              {row.itemType === "product" ? (
+                                <select
+                                  value={row.productId ?? ""}
+                                  onChange={(event) =>
+                                    handleProductSelection(row.id, event.target.value)
+                                  }
+                                  className="w-full rounded-md border border-slate-200 bg-white px-2 py-1"
+                                >
+                                  {availableProducts.map((product) => (
+                                    <option key={product.id} value={product.id}>
+                                      {product.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  value={row.name}
+                                  onChange={(event) =>
+                                    updateRow(row.id, (current) => ({
+                                      ...current,
+                                      name: event.target.value,
+                                    }))
+                                  }
+                                  className="w-full rounded-md border border-slate-200 px-2 py-1"
+                                  placeholder="وصف الخدمة"
+                                />
+                              )}
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={row.price}
+                                onChange={(event) =>
+                                  updateRow(row.id, (current) => ({
+                                    ...current,
+                                    price: toPositiveNumber(event.target.value, 0),
+                                  }))
+                                }
+                                className="w-24 rounded-md border border-slate-200 px-2 py-1 text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              <input
+                                type="number"
+                                min="1"
+                                step="1"
+                                value={row.quantity}
+                                onChange={(event) =>
+                                  updateRow(row.id, (current) => ({
+                                    ...current,
+                                    quantity: Math.max(
+                                      1,
+                                      Number.parseInt(event.target.value || "1", 10) || 1
+                                    ),
+                                  }))
+                                }
+                                className="w-20 rounded-md border border-slate-200 px-2 py-1 text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              <select
+                                value={row.discountType}
+                                onChange={(event) =>
+                                  updateRow(row.id, (current) => ({
+                                    ...current,
+                                    discountType: event.target.value as DiscountType,
+                                  }))
+                                }
+                                className="rounded-md border border-slate-200 bg-white px-2 py-1"
+                              >
+                                <option value="percent">%</option>
+                                <option value="amount">رقم</option>
+                              </select>
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={row.discountValue}
+                                onChange={(event) =>
+                                  updateRow(row.id, (current) => ({
+                                    ...current,
+                                    discountValue: toPositiveNumber(event.target.value, 0),
+                                  }))
+                                }
+                                className="w-24 rounded-md border border-slate-200 px-2 py-1 text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={row.taxRate}
+                                onChange={(event) =>
+                                  updateRow(row.id, (current) => ({
+                                    ...current,
+                                    taxRate: toPositiveNumber(event.target.value, 0),
+                                  }))
+                                }
+                                className="w-20 rounded-md border border-slate-200 px-2 py-1 text-center"
+                              />
+                            </td>
+                            <td className="px-2 py-2 text-center font-semibold text-slate-700">
+                              {formatMoney(lineTotals.total)}
+                            </td>
+                            <td className="px-2 py-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => setDeleteRowId(row.id)}
+                                className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-rose-700"
+                              >
+                                حذف
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="grid gap-4 lg:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    ملاحظات
-                  </label>
+                  <label className="text-sm font-semibold text-slate-700">ملاحظات</label>
                   <textarea
                     rows={4}
+                    value={notes}
+                    onChange={(event) => setNotes(event.target.value)}
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                     placeholder="أضف ملاحظات إضافية للفاتورة"
                   />
+
+                  <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-sm font-semibold text-slate-700">المرفقات</p>
+                    <div className="mt-2 space-y-2 text-sm">
+                      <div>
+                        <label className="mb-1 block text-slate-600">عقد</label>
+                        <input
+                          type="file"
+                          onChange={(event) =>
+                            setContractFile(event.target.files?.[0] ?? null)
+                          }
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-slate-600">تصميم</label>
+                        <input
+                          type="file"
+                          onChange={(event) => setDesignFile(event.target.files?.[0] ?? null)}
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-slate-600">أمر شراء</label>
+                        <input
+                          type="file"
+                          onChange={(event) =>
+                            setPurchaseOrderFile(event.target.files?.[0] ?? null)
+                          }
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1"
+                        />
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <div className="flex items-center justify-between">
+
+                <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="flex items-center justify-between border-b border-slate-200 py-2">
                     <span className="text-slate-600">الإجمالي</span>
-                    <span className="font-semibold text-slate-700">100</span>
+                    <span className="font-semibold text-slate-700">
+                      {formatMoney(summary.subtotal)} {currency}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">الخصم</span>
-                    <span className="font-semibold text-slate-700">0</span>
+                  <div className="flex items-center justify-between border-b border-slate-200 py-2">
+                    <span className="text-slate-600">إجمالي الخصم</span>
+                    <span className="font-semibold text-slate-700">
+                      {formatMoney(summary.discount)} {currency}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">الإجمالي النهائي</span>
-                    <span className="font-semibold text-emerald-700">100</span>
+                  <div className="flex items-center justify-between border-b border-slate-200 py-2">
+                    <span className="text-slate-600">إجمالي الضريبة</span>
+                    <span className="font-semibold text-slate-700">
+                      {formatMoney(summary.tax)} {currency}
+                    </span>
                   </div>
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-slate-700">الإجمالي النهائي</span>
+                    <span className="font-bold text-emerald-700">
+                      {formatMoney(summary.grandTotal)} {currency}
+                    </span>
+                  </div>
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    زر تحميل PDF يفتح نافذة الطباعة مباشرة لتصدير الفاتورة بصيغة PDF.
+                  </p>
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center justify-between">
-                <button className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white">
+              {validationMessage ? (
+                <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {validationMessage}
+                </div>
+              ) : null}
+
+              {saveMessage ? (
+                <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+                  {saveMessage}
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-between">
+                <button
+                  type="submit"
+                  className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white"
+                >
                   حفظ الفاتورة
                 </button>
                 <Link
@@ -233,11 +1033,27 @@ export default function NewInvoicePage() {
                 </Link>
               </div>
             </section>
-          </div>
+          </form>
         </main>
 
         <Sidebar activeLabel="الفواتير" />
       </div>
+
+      <ConfirmDeleteModal
+        open={deleteRowId !== null}
+        title="تأكيد حذف السطر"
+        message={
+          selectedDeleteRow
+            ? `هل تريد حذف "${selectedDeleteRow.name || "هذا السطر"}" من الفاتورة؟`
+            : "هل تريد حذف هذا السطر من الفاتورة؟"
+        }
+        onClose={() => setDeleteRowId(null)}
+        onConfirm={() => {
+          if (deleteRowId === null) return;
+          removeRow(deleteRowId);
+          setDeleteRowId(null);
+        }}
+      />
     </div>
   );
 }

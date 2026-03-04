@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useState } from "react";
+import { Moon, Sun } from "lucide-react";
 import type { Theme } from "../types";
 
 const STORAGE_KEY = "ui-theme";
@@ -19,7 +20,12 @@ const applyTheme = (theme: Theme) => {
   document.documentElement.style.colorScheme = theme;
 };
 
-export default function ThemeToggle() {
+type ThemeToggleProps = {
+  variant?: "compact" | "full";
+  className?: string;
+};
+
+export default function ThemeToggle({ variant = "full", className }: ThemeToggleProps) {
   const [theme, setTheme] = useState<Theme>("light");
   const [mounted, setMounted] = useState(false);
 
@@ -38,11 +44,26 @@ export default function ThemeToggle() {
 
   const nextTheme = theme === "dark" ? "light" : "dark";
 
+  if (variant === "compact") {
+    return (
+      <button
+        type="button"
+        onClick={() => setTheme(nextTheme)}
+        className={`rounded-full border border-slate-800/80 bg-slate-900/70 p-2 text-slate-200 shadow-sm hover:bg-slate-800/80 ${className ?? ""}`}
+        aria-pressed={theme === "dark"}
+        aria-label="تبديل وضع العرض"
+        title={theme === "dark" ? "الوضع الداكن" : "الوضع الفاتح"}
+      >
+        {theme === "dark" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
       onClick={() => setTheme(nextTheme)}
-      className="flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
+      className={`flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 ${className ?? ""}`}
       aria-pressed={theme === "dark"}
       aria-label="تبديل وضع العرض"
     >

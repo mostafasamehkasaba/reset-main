@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   ChevronDown,
@@ -15,12 +16,14 @@ import {
   Info,
   Truck,
 } from "lucide-react";
-import ThemeToggle from "./ThemeToggle";
 import { useSidebar } from "./SidebarContext";
 import type { SidebarProps } from "../types";
 
-const items = [
+const itemsBeforeCategories = [
   { label: "لوحة البيانات", href: "/", icon: LayoutDashboard },
+];
+
+const itemsAfterCategories = [
   { label: "الفواتير", href: "/projects-pages/invoices", icon: FileText },
   { label: "المنتجات", href: "/projects-pages/products", icon: Package },
   {
@@ -43,7 +46,20 @@ const categoryItems = [
 
 export default function Sidebar({ activeLabel }: SidebarProps) {
   const { open, close } = useSidebar();
-  const categoriesActive = categoryItems.some((item) => item.label === activeLabel);
+  const pathname = usePathname();
+  const isHrefActive = (href: string) => {
+    const normalizedPath = pathname.toLowerCase();
+    const normalizedHref = href.toLowerCase();
+    if (normalizedHref === "/") return normalizedPath === "/";
+    return (
+      normalizedPath === normalizedHref ||
+      normalizedPath.startsWith(`${normalizedHref}/`)
+    );
+  };
+
+  const categoriesActive = categoryItems.some(
+    (item) => item.label === activeLabel || isHrefActive(item.href)
+  );
   const [categoriesOpen, setCategoriesOpen] = useState(categoriesActive);
 
   useEffect(() => {
@@ -60,52 +76,66 @@ export default function Sidebar({ activeLabel }: SidebarProps) {
         aria-hidden="true"
       />
       <aside
-        className={`fixed inset-y-0 right-0 z-50 w-72 overflow-y-auto bg-white transition duration-200 lg:static lg:block lg:h-full lg:w-60 lg:translate-x-0 ${
+        className={`fixed inset-y-0 right-0 z-50 w-80 overflow-y-auto bg-transparent transition duration-200 lg:static lg:block lg:h-full lg:w-72 lg:translate-x-0 ${
           open ? "translate-x-0" : "translate-x-full"
         }`}
         dir="rtl"
       >
-        <div className="rounded-lg border border-slate-200 bg-white py-2 shadow-sm lg:rounded-none lg:border-0 lg:shadow-none">
-          <div className="flex items-center justify-between px-4 py-2 text-right text-sm font-semibold text-slate-700 lg:justify-start">
-            <span>القائمة</span>
+        <div className="app-sidebar-shell rounded-3xl border border-slate-800/70 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-900 px-3 py-4 shadow-[0_20px_40px_-30px_rgba(15,23,42,0.7)]">
+          <div className="relative mb-3">
+            <Link
+              href="/"
+              className="app-sidebar-brand flex w-full items-center gap-3 rounded-2xl border border-slate-700/60 px-3 py-2"
+            >
+              <img
+                src="/file.svg"
+                alt="فاتورة"
+                className="h-11 w-11 rounded-2xl bg-slate-800/70 p-2"
+              />
+              <div className="text-right leading-tight">
+                <p className="sidebar-brand-title text-sm font-semibold">فاتورة</p>
+                <p className="sidebar-brand-sub text-xs">نظام إدارة الأعمال</p>
+              </div>
+            </Link>
             <button
               type="button"
               onClick={close}
-              className="rounded-md p-1 text-slate-500 hover:bg-slate-100 lg:hidden"
+              className="absolute left-2 top-2 rounded-md p-1 text-slate-400 hover:bg-white/10 lg:hidden"
               aria-label="إغلاق القائمة"
             >
               ✕
             </button>
           </div>
-          <nav className="space-y-1 text-sm">
-            {items.map((item) => {
-              const isActive = item.label === activeLabel;
+
+          <p className="sidebar-section-label mb-2 px-2 text-xs font-semibold text-slate-400">
+            الرئيسية
+          </p>
+
+          <nav className="space-y-3 text-sm">
+            {itemsBeforeCategories.map((item) => {
+              const isActive = item.label === activeLabel || isHrefActive(item.href);
+              const isPrimary = item.label === "لوحة البيانات";
               const Icon = item.icon;
               return (
                 <Link
                   key={item.label}
-                  className={`flex items-center justify-between gap-2 px-3 py-2 text-right ${
-                    isActive
-                      ? "border-r-4 border-brand-800 bg-brand-800 text-white"
-                      : "text-slate-600 hover:bg-slate-50"
+                  className={`sidebar-item flex items-center justify-between gap-3 rounded-2xl border border-slate-800/60 px-4 py-3 text-right transition-colors ${
+                    isActive ? "sidebar-item--active" : isPrimary ? "sidebar-item--primary" : ""
                   }`}
                   href={item.href}
                   onClick={close}
                 >
                   <span className="flex items-center gap-2">
-                    <Icon
-                      className={`h-4 w-4 ${
-                        isActive ? "text-white" : "text-slate-400"
+                    <span
+                      className={`sidebar-item__icon-wrap ${
+                        isActive || isPrimary ? "sidebar-item__icon-wrap--active" : ""
                       }`}
-                    />
+                    >
+                      <Icon
+                        className="sidebar-item__icon h-4 w-4"
+                      />
+                    </span>
                     {item.label}
-                  </span>
-                  <span
-                    className={`text-xs ${
-                      isActive ? "text-white/80" : "text-slate-400"
-                    }`}
-                  >
-                    ▪
                   </span>
                 </Link>
               );
@@ -115,20 +145,22 @@ export default function Sidebar({ activeLabel }: SidebarProps) {
               <button
                 type="button"
                 onClick={() => setCategoriesOpen((prev) => !prev)}
-                className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-right ${
-                  categoriesActive
-                    ? "border-r-4 border-brand-800 bg-brand-800 text-white"
-                    : "text-slate-600 hover:bg-slate-50"
+                className={`sidebar-item flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-800/60 px-4 py-3 text-right transition-colors ${
+                  categoriesActive ? "sidebar-item--active" : ""
                 }`}
                 aria-expanded={categoriesOpen}
                 aria-label="قائمة التصنيفات"
               >
                 <span className="flex items-center gap-2">
-                  <Tag
-                    className={`h-4 w-4 ${
-                      categoriesActive ? "text-white" : "text-slate-400"
+                  <span
+                    className={`sidebar-item__icon-wrap ${
+                      categoriesActive ? "sidebar-item__icon-wrap--active" : ""
                     }`}
-                  />
+                  >
+                    <Tag
+                      className="sidebar-item__icon h-4 w-4"
+                    />
+                  </span>
                   التصنيفات
                 </span>
                 <ChevronDown
@@ -139,32 +171,72 @@ export default function Sidebar({ activeLabel }: SidebarProps) {
               </button>
 
               {categoriesOpen && (
-                <div className="space-y-1 pr-4">
+                <div className="space-y-3 pr-4">
                   {categoryItems.map((item) => {
-                    const isSubActive = item.label === activeLabel;
+                    const isSubActive =
+                      item.label === activeLabel || isHrefActive(item.href);
                     return (
                       <Link
                         key={item.label}
                         href={item.href}
                         onClick={close}
-                        className={`flex items-center justify-between rounded-md px-3 py-2 text-right ${
-                          isSubActive
-                            ? "bg-slate-100 font-semibold text-brand-800"
-                            : "text-slate-600 hover:bg-slate-50"
+                        className={`sidebar-item sidebar-item--sub flex items-center justify-between rounded-xl border border-slate-800/60 px-4 py-2 text-right transition-colors ${
+                          isSubActive ? "sidebar-item--active" : ""
                         }`}
                       >
-                        <span>{item.label}</span>
-                        <span className="text-xs text-slate-400">•</span>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className={`sidebar-item__icon-wrap ${
+                              isSubActive ? "sidebar-item__icon-wrap--active" : ""
+                            }`}
+                          >
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 24 24"
+                              className="sidebar-item__icon h-4 w-4"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                            >
+                              <path d="M7 10l5 5 5-5" />
+                            </svg>
+                          </span>
+                          {item.label}
+                        </span>
                       </Link>
                     );
                   })}
                 </div>
               )}
             </div>
+
+            {itemsAfterCategories.map((item) => {
+              const isActive = item.label === activeLabel || isHrefActive(item.href);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.label}
+                  className={`sidebar-item flex items-center justify-between gap-3 rounded-2xl border border-slate-800/60 px-4 py-3 text-right transition-colors ${
+                    isActive ? "sidebar-item--active" : ""
+                  }`}
+                  href={item.href}
+                  onClick={close}
+                >
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={`sidebar-item__icon-wrap ${
+                        isActive ? "sidebar-item__icon-wrap--active" : ""
+                      }`}
+                    >
+                      <Icon className="sidebar-item__icon h-4 w-4" />
+                    </span>
+                    {item.label}
+                  </span>
+                </Link>
+              );
+            })}
           </nav>
-          <div className="border-t border-slate-200 px-3 py-3">
-            <ThemeToggle />
-          </div>
+          <div className="mt-4 border-t border-slate-800/80 px-3 py-3" />
         </div>
       </aside>
     </>

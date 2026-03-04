@@ -1,49 +1,10 @@
 import Sidebar from "../../../components/Sidebar";
-import SidebarToggle from "../../../components/SidebarToggle";
+import TopNav from "../../../components/TopNav";
 
 export default function ViewInvoicePage() {
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
-      <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
-          <div className="flex items-center gap-3 text-slate-200">
-            <button
-              className="rounded-md p-1 transition hover:bg-white/10"
-              aria-label="الصفحة الرئيسية"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <path d="M3 11.5L12 4l9 7.5" />
-                <path d="M6 10v10h12V10" />
-              </svg>
-            </button>
-            <button
-              className="rounded-md p-1 transition hover:bg-white/10"
-              aria-label="المستخدم"
-            >
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <circle cx="12" cy="8" r="3.5" />
-                <path d="M4.5 20c1.8-3 5-4.5 7.5-4.5s5.7 1.5 7.5 4.5" />
-              </svg>
-            </button>
-            <SidebarToggle />
-          </div>
-          <div className="text-right text-base font-semibold">فاتورة+</div>
-        </div>
-      </header>
+      <TopNav currentLabel="الفواتير" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">

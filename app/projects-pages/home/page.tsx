@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import {
   Chart as ChartJS,
@@ -11,8 +11,15 @@ import {
   Legend,
 } from "chart.js";
 import { Line } from "react-chartjs-2";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../../components/Sidebar";
-import SidebarToggle from "../../components/SidebarToggle";
+import TopNav from "../../components/TopNav";
+import {
+  defaultProducts,
+  getStockAlerts,
+  loadProductsFromStorage,
+} from "../../lib/product-store";
+import styles from "./home-dashboard.module.css";
 
 ChartJS.register(
   CategoryScale,
@@ -24,346 +31,369 @@ ChartJS.register(
   Legend
 );
 
-const days = Array.from({ length: 30 }, (_, i) =>
-  String(i + 1).padStart(2, "0")
-);
+const days = Array.from({ length: 30 }, (_, i) => String(i + 1).padStart(2, "0"));
+const invoicesSeries = [
+  0, 6, 2, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 5, 0, 0, 0, 6, 2, 8, 3, 6,
+];
+const paymentsSeries = [
+  0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 3, 0, 0, 5, 0, 7,
+];
+const paidSeries = [
+  0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 2, 0, 2,
+];
 
-const chartData = {
-  labels: days,
-  datasets: [
-    {
-      label: "الفواتير",
-      data: [
-        0, 6, 2, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0,
-        5, 0, 0, 0, 6, 2, 8, 3, 6,
-      ],
-      borderColor: "#1e88e5",
-      backgroundColor: "rgba(30,136,229,0.2)",
-      pointRadius: 3,
-      tension: 0.35,
-    },
-    {
-      label: "الدفعات",
-      data: [
-        0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0,
-        0, 0, 0, 0, 3, 0, 0, 5, 0, 7,
-      ],
-      borderColor: "#f39c12",
-      backgroundColor: "rgba(243,156,18,0.2)",
-      pointRadius: 3,
-      tension: 0.35,
-    },
-    {
-      label: "المدفوع",
-      data: [
-        0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0,
-        0, 2, 0, 0, 0, 1, 0, 2, 0, 2,
-      ],
-      borderColor: "#2ecc71",
-      backgroundColor: "rgba(46,204,113,0.2)",
-      pointRadius: 3,
-      tension: 0.35,
-    },
-  ],
-};
-
-const chartOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      display: false,
-    },
-    tooltip: {
-      rtl: true,
-      titleAlign: "right" as const,
-      bodyAlign: "right" as const,
-      backgroundColor: "#0f172a",
-      titleColor: "#f8fafc",
-      bodyColor: "#f8fafc",
-      borderColor: "rgba(148,163,184,0.4)",
-      borderWidth: 1,
-    },
-  },
-  scales: {
-    x: {
-      grid: {
-        display: false,
-      },
-      ticks: {
-        color: "#94a3b8",
-        font: {
-          size: 10,
-        },
-      },
-    },
-    y: {
-      grid: {
-        color: "rgba(226,232,240,0.8)",
-      },
-      ticks: {
-        color: "#94a3b8",
-        font: {
-          size: 10,
-        },
-      },
-    },
-  },
+const toCurrency = (value: number) => `OMR ${value.toLocaleString()}`;
+const getThemeState = () => {
+  if (typeof window === "undefined") return false;
+  const explicit = document.documentElement.getAttribute("data-theme");
+  if (explicit === "dark") return true;
+  if (explicit === "light") return false;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
 };
 
 export default function HomePage() {
+  const [products, setProducts] = useState(defaultProducts);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    setProducts(loadProductsFromStorage());
+  }, []);
+
+  useEffect(() => {
+    setIsDark(getThemeState());
+    const syncTheme = () => setIsDark(getThemeState());
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const mediaHandler = () => syncTheme();
+    media.addEventListener("change", mediaHandler);
+    return () => {
+      observer.disconnect();
+      media.removeEventListener("change", mediaHandler);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncProducts = () => setProducts(loadProductsFromStorage());
+    window.addEventListener("storage", syncProducts);
+    window.addEventListener("focus", syncProducts);
+    return () => {
+      window.removeEventListener("storage", syncProducts);
+      window.removeEventListener("focus", syncProducts);
+    };
+  }, []);
+
+  const stockAlerts = useMemo(() => getStockAlerts(products), [products]);
+  const criticalAlertsCount = stockAlerts.filter((alert) => alert.level === "critical").length;
+  const reorderAlertsCount = stockAlerts.filter((alert) => alert.level === "reorder").length;
+  const totalInventoryUnits = products.reduce((sum, product) => sum + product.quantity, 0);
+  const totalInventoryCost = products.reduce(
+    (sum, product) => sum + product.quantity * product.purchasePrice,
+    0
+  );
+  const averageTax = useMemo(() => {
+    const taxableProducts = products.filter((product) => product.taxMode !== "none");
+    if (!taxableProducts.length) return 0;
+    const totalTax = taxableProducts.reduce(
+      (sum, product) => sum + product.defaultTaxRate,
+      0
+    );
+    return totalTax / taxableProducts.length;
+  }, [products]);
+
+  const paymentTotal = 1110;
+  const paymentPaid = 555;
+  const discount = 5;
+  const due = 630;
+  const paymentProgress = Math.min(100, Math.round((paymentPaid / paymentTotal) * 100));
+  const topAlerts = stockAlerts.slice(0, 5);
+
+  const chartData = useMemo(
+    () => ({
+      labels: days,
+      datasets: [
+        {
+          label: "الفواتير",
+          data: invoicesSeries,
+          borderColor: isDark ? "#2dd4bf" : "#0f766e",
+          backgroundColor: isDark ? "rgba(45,212,191,0.15)" : "rgba(15,118,110,0.14)",
+          pointRadius: 2.5,
+          borderWidth: 2.2,
+          tension: 0.35,
+          fill: true,
+        },
+        {
+          label: "الدفعات",
+          data: paymentsSeries,
+          borderColor: isDark ? "#fbbf24" : "#d97706",
+          backgroundColor: "transparent",
+          pointRadius: 2.5,
+          borderWidth: 2,
+          tension: 0.35,
+        },
+        {
+          label: "المدفوع",
+          data: paidSeries,
+          borderColor: isDark ? "#7dd3fc" : "#0284c7",
+          backgroundColor: "transparent",
+          pointRadius: 2.5,
+          borderWidth: 2,
+          tension: 0.35,
+        },
+      ],
+    }),
+    [isDark]
+  );
+
+  const chartOptions = useMemo(
+    () => ({
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          rtl: true,
+          titleAlign: "right" as const,
+          bodyAlign: "right" as const,
+          backgroundColor: isDark ? "#0b1220" : "#0f172a",
+          titleColor: "#f8fafc",
+          bodyColor: "#e2e8f0",
+          borderColor: isDark ? "rgba(148,163,184,0.3)" : "rgba(148,163,184,0.35)",
+          borderWidth: 1,
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: {
+            color: isDark ? "#8ca3c3" : "#5b708f",
+            font: { size: 10 },
+          },
+        },
+        y: {
+          grid: {
+            color: isDark ? "rgba(44,62,89,0.75)" : "rgba(203,213,225,0.75)",
+          },
+          ticks: {
+            color: isDark ? "#8ca3c3" : "#5b708f",
+            font: { size: 10 },
+          },
+        },
+      },
+    }),
+    [isDark]
+  );
+
+  const currentDate = new Date().toLocaleDateString("ar-EG", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+  });
+
   return (
-    <div className="flex h-dvh w-full flex-col bg-slate-100 text-slate-800">
-      <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
-          <div className="flex items-center gap-3 text-slate-200">
-            <SidebarToggle />
-          </div>
-          <div className="text-right text-base font-semibold">فاتورة+</div>
-        </div>
-      </header>
+    <div className={`${styles.dashboardRoot} flex h-dvh w-full flex-col`}>
+      <TopNav currentLabel="لوحة البيانات" />
 
       <div
         className="flex min-h-0 w-full flex-1 gap-0 px-3 pt-4 sm:px-4 sm:pt-6 lg:gap-5 lg:px-6"
         dir="ltr"
       >
-        <main
-          className="min-w-0 flex-1 space-y-4 overflow-y-auto pb-4 sm:pb-6"
-          dir="rtl"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 shadow-sm sm:px-4 sm:py-3">
-            <div className="flex items-center gap-3 text-slate-600">
-              <button
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm shadow-sm"
-                aria-label="السابق"
-              >
-                ◀
-              </button>
-              <span className="text-sm font-semibold">OMR</span>
-              <button
-                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm shadow-sm"
-                aria-label="التالي"
-              >
-                ▶
-              </button>
+        <main className="min-w-0 flex-1 space-y-4 pb-4 sm:pb-6" dir="rtl">
+          <section className={styles.heroSection}>
+            <div>
+              <p className={styles.heroTag}>مركز التحكم المالي</p>
+              <h1 className={styles.heroTitle}>لوحة بيانات احترافية لإدارة الفواتير والمخزون</h1>
+              <p className={styles.heroSubtitle}>
+                رؤية لحظية للمبيعات، التوريد، الضرائب، وتنبيهات المخزون في واجهة واحدة.
+              </p>
             </div>
-            <div className="text-right text-lg font-semibold text-slate-700">
-              لوحة البيانات
+            <div className={styles.heroMeta}>
+              <span>{currentDate}</span>
+              <span>آخر تحديث: الآن</span>
             </div>
-          </div>
+          </section>
 
-          <div
-            className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]"
-            dir="ltr"
-          >
-            <section
-              className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm sm:p-4"
-              dir="rtl"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600">
-                <div className="flex items-center gap-2">
-                  <button className="inline-flex items-center gap-2 rounded-md bg-brand-800 px-3 py-1 text-white shadow-sm">
-                    فلترة
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 24 24"
-                      className="h-3.5 w-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
+          <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <article className={styles.metricCard}>
+              <p className={styles.metricLabel}>قيمة المخزون (تكلفة)</p>
+              <p className={styles.metricValue}>{toCurrency(totalInventoryCost)}</p>
+              <p className={styles.metricHint}>إجمالي وحدات المخزون: {totalInventoryUnits}</p>
+            </article>
+
+            <article className={styles.metricCard}>
+              <p className={styles.metricLabel}>إجمالي المنتجات</p>
+              <p className={styles.metricValue}>{products.length}</p>
+              <p className={styles.metricHint}>منتجات بها ضريبة: {products.filter((p) => p.taxMode !== "none").length}</p>
+            </article>
+
+            <article className={styles.metricCard}>
+              <p className={styles.metricLabel}>تنبيهات المخزون</p>
+              <p className={styles.metricValue}>{stockAlerts.length}</p>
+              <p className={styles.metricHint}>
+                حرج: {criticalAlertsCount} | إعادة طلب: {reorderAlertsCount}
+              </p>
+            </article>
+
+            <article className={styles.metricCard}>
+              <p className={styles.metricLabel}>متوسط الضريبة</p>
+              <p className={styles.metricValue}>{averageTax.toFixed(1)}%</p>
+              <p className={styles.metricHint}>اعتمادًا على المنتجات الخاضعة للضريبة</p>
+            </article>
+          </section>
+
+          <section>
+            <article className={styles.panel}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h2 className={styles.panelTitle}>التحليل الشهري</h2>
+                  <p className={styles.panelHint}>أداء الفواتير والدفعات خلال 30 يوم</p>
+                </div>
+                <div className={styles.legendRow}>
+                  <span className={styles.legendItem}>
+                    <span className={styles.dotTeal} />
+                    الفواتير
+                  </span>
+                  <span className={styles.legendItem}>
+                    <span className={styles.dotAmber} />
+                    الدفعات
+                  </span>
+                  <span className={styles.legendItem}>
+                    <span className={styles.dotSky} />
+                    المدفوع
+                  </span>
+                </div>
+              </div>
+              <div className="mt-4 h-64 sm:h-80 lg:h-96">
+                <Line data={chartData} options={chartOptions} />
+              </div>
+            </article>
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-3">
+            <article className={styles.panel}>
+              <h2 className={styles.panelTitle}>ملخص التحصيل</h2>
+              <div className="mt-3 space-y-3">
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className={styles.panelHint}>نسبة التحصيل</span>
+                    <span className={styles.valueInline}>{paymentProgress}%</span>
+                  </div>
+                  <div className={styles.progressTrack}>
+                    <div className={styles.progressFill} style={{ width: `${paymentProgress}%` }} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 text-sm">
+                  <div className={styles.smallKpi}>
+                    <p className={styles.smallKpiLabel}>الإجمالي</p>
+                    <p className={styles.smallKpiValue}>{toCurrency(paymentTotal)}</p>
+                  </div>
+                  <div className={styles.smallKpi}>
+                    <p className={styles.smallKpiLabel}>المدفوع</p>
+                    <p className={styles.smallKpiValue}>{toCurrency(paymentPaid)}</p>
+                  </div>
+                  <div className={styles.smallKpi}>
+                    <p className={styles.smallKpiLabel}>المستحق</p>
+                    <p className={styles.smallKpiValue}>{toCurrency(due)}</p>
+                  </div>
+                  <div className={styles.smallKpi}>
+                    <p className={styles.smallKpiLabel}>الخصم</p>
+                    <p className={styles.smallKpiValue}>{toCurrency(discount)}</p>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <article className={styles.panel}>
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className={styles.panelTitle}>تنبيهات المخزون</h2>
+                <span className={styles.alertBadge}>{stockAlerts.length}</span>
+              </div>
+
+              {topAlerts.length === 0 ? (
+                <div className={styles.emptyState}>لا توجد منتجات بحاجة لإعادة طلب الآن.</div>
+              ) : (
+                <div className="space-y-2">
+                  {topAlerts.map((alert) => (
+                    <div
+                      key={`${alert.product.id}-${alert.product.code}`}
+                      className={styles.alertCard}
                     >
-                      <path d="M7 10l5 5 5-5" />
-                    </svg>
-                  </button>
-                </div>
-                <div
-                  className="flex w-full flex-wrap items-center justify-end gap-3 sm:w-auto sm:gap-4"
-                  dir="rtl"
-                >
-                  <div className="flex items-center gap-2">
-                    <span>الشهر</span>
-                    <div className="relative">
-                      <select
-                        className="w-28 appearance-none rounded-md border border-slate-200 bg-white px-3 py-1 pl-8 text-sm"
-                        aria-label="الشهر"
-                        defaultValue="09"
-                      >
-                        <option value="09">سبتمبر</option>
-                        <option value="10">أكتوبر</option>
-                        <option value="11">نوفمبر</option>
-                      </select>
-                      <svg
-                        aria-hidden="true"
-                        viewBox="0 0 24 24"
-                        className="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <path d="M7 10l5 5 5-5" />
-                      </svg>
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={alert.product.imageUrl || "/file.svg"}
+                          alt={alert.product.name}
+                          className={styles.alertImage}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className={styles.alertTitle}>{alert.product.name}</p>
+                          <p className={styles.alertSub}>
+                            {alert.product.code} | {alert.product.supplierName}
+                          </p>
+                        </div>
+                        <span
+                          className={
+                            alert.level === "critical"
+                              ? styles.alertLevelCritical
+                              : styles.alertLevelReorder
+                          }
+                        >
+                          {alert.level === "critical" ? "حرج" : "إعادة طلب"}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 grid grid-cols-2 gap-1">
+                        <p className={styles.metaLine}>
+                          الكمية: {alert.product.quantity} {alert.product.unit}
+                        </p>
+                        <p className={styles.metaLine}>
+                          حد إعادة الطلب: {alert.product.reorderPoint}
+                        </p>
+                        <p className={styles.metaLine}>
+                          سعر الشراء: {alert.product.purchasePrice} {alert.product.currency}
+                        </p>
+                        <p className={styles.metaLine}>
+                          الضريبة:{" "}
+                          {alert.product.taxMode === "none"
+                            ? "بدون"
+                            : `${alert.product.defaultTaxRate}%`}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span>السنة:</span>
-                    <input
-                      className="w-20 rounded-md border border-slate-200 bg-white px-2 py-1 text-center"
-                      defaultValue="2024"
-                      aria-label="السنة"
-                    />
-                  </div>
+                  ))}
+                </div>
+              )}
+            </article>
+
+            <article className={styles.panel}>
+              <h2 className={styles.panelTitle}>توزيع نوع الضريبة</h2>
+              <div className="mt-3 space-y-2">
+                <div className={styles.rowBetween}>
+                  <span className={styles.panelHint}>شامل ضريبة</span>
+                  <span className={styles.valueInline}>
+                    {products.filter((product) => product.taxMode === "inclusive").length}
+                  </span>
+                </div>
+                <div className={styles.rowBetween}>
+                  <span className={styles.panelHint}>نسبة ضريبة</span>
+                  <span className={styles.valueInline}>
+                    {products.filter((product) => product.taxMode === "rate").length}
+                  </span>
+                </div>
+                <div className={styles.rowBetween}>
+                  <span className={styles.panelHint}>بدون ضريبة</span>
+                  <span className={styles.valueInline}>
+                    {products.filter((product) => product.taxMode === "none").length}
+                  </span>
                 </div>
               </div>
+            </article>
+          </section>
 
-              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-500">
-                  <div className="font-semibold text-slate-700">ريال عماني</div>
-                  <div className="flex w-full flex-wrap items-center gap-3 text-xs sm:w-auto sm:gap-4">
-                    <span className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-[#1e88e5]" />
-                      الفواتير
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-[#f39c12]" />
-                      الدفعات
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-[#2ecc71]" />
-                      المدفوع
-                    </span>
-                  </div>
-                  <div className="text-xs font-semibold text-slate-600">OMR</div>
-                </div>
-
-                <div className="mt-3">
-                  <div className="h-56 sm:h-72 lg:h-80">
-                    <Line data={chartData} options={chartOptions} />
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <aside className="space-y-3" dir="rtl">
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 shadow-sm sm:p-4">
-                <div className="flex items-center gap-3 text-blue-900">
-                  <div className="rounded-full bg-blue-200/60 p-2">
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 24 24"
-                      className="h-6 w-6"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    >
-                      <path d="M6 2h9l3 3v17H6z" />
-                      <path d="M9 11h6M9 15h6M9 7h3" />
-                    </svg>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold sm:text-3xl">19</div>
-                    <div className="text-xs text-blue-800">
-                      الفواتير - من أصل 30
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 shadow-sm sm:p-4">
-                <div className="flex items-center gap-3 text-yellow-900">
-                  <div className="rounded-full bg-yellow-200/70 p-2">
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 24 24"
-                      className="h-6 w-6"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    >
-                      <rect x="5" y="3" width="14" height="18" rx="2" />
-                      <path d="M8 8h8M8 12h8M8 16h5" />
-                    </svg>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">OMR 1110</div>
-                    <div className="text-xs">المجموع</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 shadow-sm sm:p-4">
-                  <div className="flex items-center gap-3 text-emerald-900">
-                    <div className="rounded-full bg-emerald-200/70 p-2">
-                      <svg
-                        aria-hidden="true"
-                        viewBox="0 0 24 24"
-                        className="h-6 w-6"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M8 12l2.5 2.5L16 9" />
-                      </svg>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xl font-bold">OMR 555</div>
-                      <div className="text-xs">المبلغ المدفوع</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-slate-200 bg-slate-100 p-3 shadow-sm sm:p-4">
-                  <div className="flex items-center gap-3 text-slate-700">
-                    <div className="rounded-full bg-slate-200/70 p-2">
-                      <svg
-                        aria-hidden="true"
-                        viewBox="0 0 24 24"
-                        className="h-6 w-6"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                      >
-                        <circle cx="12" cy="12" r="9" />
-                        <path d="M8 12h8" />
-                      </svg>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xl font-bold">OMR 5</div>
-                      <div className="text-xs">التخفيض</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 shadow-sm sm:p-4">
-                <div className="flex items-center gap-3 text-rose-900">
-                  <div className="rounded-full bg-rose-200/70 p-2">
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 24 24"
-                      className="h-6 w-6"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    >
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 7v6l4 2" />
-                    </svg>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">OMR 630</div>
-                    <div className="text-xs">المستحق</div>
-                  </div>
-                </div>
-              </div>
-            </aside>
-          </div>
-
-          <div className="pt-0.5" dir="rtl">
-            <div className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-center text-xs text-slate-500 shadow-sm">
-              جميع الحقوق محفوظة فاتورة+ © 2024 - بواسطة ديفر
-            </div>
+          <div className={styles.footerNote}>
+            جميع الحقوق محفوظة فاتورة+ © 2026
           </div>
         </main>
 

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useMemo, useState } from "react";
 import Sidebar from "../../../components/Sidebar";
-import SidebarToggle from "../../../components/SidebarToggle";
+import TopNav from "../../../components/TopNav";
 import type { CategoryStatus, MainCategory, SubCategory } from "../../../types";
 
 const initialMainCategories: MainCategory[] = [
@@ -80,14 +80,7 @@ export default function MainCategoriesPage() {
 
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
-      <header className="bg-brand-900 text-white shadow-sm" dir="ltr">
-        <div className="flex h-14 w-full items-center justify-between px-3 sm:px-4 lg:px-6">
-          <div className="flex items-center gap-3 text-slate-200">
-            <SidebarToggle />
-          </div>
-          <div className="text-right text-base font-semibold">فاتورة+</div>
-        </div>
-      </header>
+      <TopNav currentLabel="التصنيفات الأساسية" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
@@ -123,10 +116,10 @@ export default function MainCategoriesPage() {
                 >
                   إضافة تصنيف أساسي +
                 </button>
-                <div className="flex items-center overflow-hidden rounded-full border border-slate-200 bg-white shadow-sm">
+                <div className="app-search">
                   <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">🔍</span>
                   <input
-                    className="h-10 w-48 px-3 text-sm outline-none"
+                    className="app-search-input h-10 w-48 px-3 text-sm outline-none"
                     placeholder="بحث"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
