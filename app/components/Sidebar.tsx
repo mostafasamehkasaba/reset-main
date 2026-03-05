@@ -10,6 +10,7 @@ import {
   Package,
   CreditCard,
   Tag,
+  Tags,
   Users,
   Settings,
   Mail,
@@ -175,6 +176,7 @@ export default function Sidebar({ activeLabel }: SidebarProps) {
                   {categoryItems.map((item) => {
                     const isSubActive =
                       item.label === activeLabel || isHrefActive(item.href);
+                    const Icon = item.href.includes("/main") ? Tag : Tags;
                     return (
                       <Link
                         key={item.label}
@@ -190,16 +192,7 @@ export default function Sidebar({ activeLabel }: SidebarProps) {
                               isSubActive ? "sidebar-item__icon-wrap--active" : ""
                             }`}
                           >
-                            <svg
-                              aria-hidden="true"
-                              viewBox="0 0 24 24"
-                              className="sidebar-item__icon h-4 w-4"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.5"
-                            >
-                              <path d="M7 10l5 5 5-5" />
-                            </svg>
+                            <Icon className="sidebar-item__icon h-4 w-4" />
                           </span>
                           {item.label}
                         </span>

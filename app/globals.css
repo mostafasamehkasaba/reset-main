@@ -137,6 +137,12 @@ body {
   color: #6b7a92;
 }
 
+:root:not([data-theme]) .app-surface-card,
+:root[data-theme="light"] .app-surface-card {
+  background: #f2f5ff;
+  border-color: #d7deea;
+}
+
 :root:not([data-theme]) .app-sidebar-shell .sidebar-item:hover,
 :root[data-theme="light"] .app-sidebar-shell .sidebar-item:hover {
   background: #e9efff;
@@ -191,6 +197,11 @@ body {
   background: rgba(15, 23, 42, 0.7);
   border-color: rgba(30, 41, 59, 0.6);
   color: #cbd5e1;
+}
+
+:root[data-theme="dark"] .app-surface-card {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(30, 41, 59, 0.6);
 }
 
 :root[data-theme="dark"] .app-sidebar-shell .sidebar-item:hover {

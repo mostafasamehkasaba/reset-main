@@ -43,20 +43,22 @@ export default function ProductsPage() {
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">
-              المنتجات
-            </div>
-            <div className="flex items-center gap-2">
+          <div
+            className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-[1fr_auto_1fr] md:items-center"
+            dir="ltr"
+          >
+            <div className="flex justify-start">
               <Link
                 href="/projects-pages/products/new"
-                className="rounded-full bg-brand-900 px-4 py-2 text-sm text-white"
+                className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600"
               >
-                جديد +
+                منتج جديد
               </Link>
+            </div>
+            <div className="flex justify-center">
               <div className="app-search">
                 <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">
-                  🔍
+                  ًں”چ
                 </span>
                 <input
                   className="app-search-input h-10 w-44 px-3 text-sm outline-none"
@@ -65,6 +67,9 @@ export default function ProductsPage() {
                   onChange={(event) => setQuery(event.target.value)}
                 />
               </div>
+            </div>
+            <div className="text-right text-lg font-semibold text-slate-700" dir="rtl">
+              المنتجات
             </div>
           </div>
 
