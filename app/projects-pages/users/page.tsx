@@ -179,25 +179,43 @@ export default function UsersPage() {
             </article>
           </section>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">المستخدمين</div>
-            <div className="flex items-center gap-2">
+          <div
+            className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-[1fr_auto_1fr] md:items-center"
+            dir="ltr"
+          >
+            <div className="flex justify-start">
               <button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                className="rounded-full bg-brand-900 px-4 py-2 text-sm text-white transition hover:bg-brand-800"
+                className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600"
               >
-                إضافة مستخدم +
+                مستخدم جديد
               </button>
+            </div>
+            <div className="flex justify-center">
               <div className="app-search">
-                <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">🔍</span>
                 <input
-                  className="app-search-input h-10 w-52 px-3 text-sm outline-none"
+                  className="app-search-input h-10 w-52 px-3 text-right text-sm outline-none"
                   placeholder="ابحث عن مستخدم"
+                  dir="rtl"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="app-search-icon h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" />
+                </svg>
               </div>
+            </div>
+            <div className="text-right text-lg font-semibold text-slate-700" dir="rtl">
+              المستخدمين
             </div>
           </div>
 

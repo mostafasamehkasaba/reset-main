@@ -244,44 +244,41 @@ export default function InvoicesPage() {
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
           <div className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-3">
-              <div className="text-right md:justify-self-start">
-                <p className="text-lg font-semibold text-slate-700">الفواتير</p>
+            <div className="grid grid-cols-1 items-center gap-3 md:grid-cols-[1fr_auto_1fr]" dir="ltr">
+              <div className="flex justify-start">
+                <a
+                  href="/projects-pages/invoices/new"
+                  className="inline-flex rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-600"
+                >
+                  فاتورة جديدة
+                </a>
               </div>
 
               <div className="w-full md:justify-self-center">
                 <div className="app-search mx-auto w-full max-w-md">
-                  <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-800 text-white shadow-sm">
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 24 24"
-                      className="h-4 w-4"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                    >
-                      <circle cx="11" cy="11" r="7" />
-                      <path d="M20 20l-3.5-3.5" />
-                    </svg>
-                  </span>
                   <input
-                    className="app-search-input h-10 w-full px-2 text-sm outline-none"
+                    className="app-search-input h-10 w-full px-2 text-right text-sm outline-none"
                     placeholder="ابحث عن فاتورة بالرقم أو العميل"
+                    dir="rtl"
                   />
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="app-search-icon h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" />
+                  </svg>
                 </div>
               </div>
-
-              <div className="md:justify-self-end">
-                <a
-                  href="/projects-pages/invoices/new"
-                  className="inline-flex rounded-full bg-brand-800 px-4 py-2 text-sm text-white shadow-sm transition hover:bg-brand-900"
-                >
-                  إضافة فاتورة جديدة
-                </a>
+              <div className="text-right md:justify-self-end" dir="rtl">
+                <p className="text-lg font-semibold text-slate-700">الفواتير</p>
               </div>
             </div>
           </div>
-
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm" dir="rtl">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-right text-xs sm:text-sm">

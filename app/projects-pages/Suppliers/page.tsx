@@ -103,19 +103,36 @@ export default function SuppliersPage() {
             </article>
           </section>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">الموردين</div>
-            <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-[1fr_auto_1fr] md:items-center"
+            dir="ltr"
+          >
+            <div className="flex flex-wrap items-center justify-start gap-2">
               <Link
                 href="/projects-pages/Suppliers/new"
-                className="rounded-full bg-brand-900 px-4 py-2 text-sm text-white transition hover:bg-brand-800"
+                className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600"
               >
-                إضافة مورد +
+                مورد جديد
               </Link>
+              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm text-slate-600 shadow-sm">
+                <span>إظهار</span>
+                <select
+                  className="bg-transparent text-sm text-slate-700 outline-none"
+                  defaultValue="10"
+                  aria-label="عدد الصفوف"
+                >
+                  <option value="10">10</option>
+                  <option value="20">20</option>
+                  <option value="50">50</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-center">
               <div className="app-search">
                 <input
-                  className="app-search-input h-9 w-64 px-2 text-sm outline-none"
+                  className="app-search-input h-9 w-64 px-2 text-right text-sm outline-none"
                   placeholder="اكتب ما تريد أن تبحث عنه"
+                  dir="rtl"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -131,18 +148,9 @@ export default function SuppliersPage() {
                   <path d="M20 20l-3.5-3.5" />
                 </svg>
               </div>
-              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm text-slate-600 shadow-sm">
-                <span>إظهار</span>
-                <select
-                  className="bg-transparent text-sm text-slate-700 outline-none"
-                  defaultValue="10"
-                  aria-label="عدد الصفوف"
-                >
-                  <option value="10">10</option>
-                  <option value="20">20</option>
-                  <option value="50">50</option>
-                </select>
-              </div>
+            </div>
+            <div className="text-right text-lg font-semibold text-slate-700" dir="rtl">
+              الموردين
             </div>
           </div>
 

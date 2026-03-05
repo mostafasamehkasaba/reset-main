@@ -104,21 +104,23 @@ export default function ClientViewPage({ params }: ClientViewPageProps) {
               <button className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm">◀</button>
               <span className="text-sm font-semibold">{currency}</span>
               <button className="rounded-md border border-slate-200 bg-white px-2 py-1 text-sm">▶</button>
-              <div className="app-search">
-                <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    className="h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  >
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-3.5-3.5" />
-                  </svg>
-                </span>
-                <input className="app-search-input h-10 w-40 px-3 text-sm outline-none" placeholder="بحث" />
+              <div className="app-search" dir="ltr">
+                <input
+                  className="app-search-input h-10 w-40 px-3 text-right text-sm outline-none"
+                  placeholder="بحث"
+                  dir="rtl"
+                />
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="app-search-icon h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" />
+                </svg>
               </div>
             </div>
             <div className="text-right text-lg font-semibold text-slate-700">

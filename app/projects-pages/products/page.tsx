@@ -57,15 +57,24 @@ export default function ProductsPage() {
             </div>
             <div className="flex justify-center">
               <div className="app-search">
-                <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">
-                  ًں”چ
-                </span>
                 <input
-                  className="app-search-input h-10 w-44 px-3 text-sm outline-none"
+                  className="app-search-input h-10 w-44 px-3 text-right text-sm outline-none"
                   placeholder="بحث"
+                  dir="rtl"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  className="app-search-icon h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M20 20l-3.5-3.5" />
+                </svg>
               </div>
             </div>
             <div className="text-right text-lg font-semibold text-slate-700" dir="rtl">

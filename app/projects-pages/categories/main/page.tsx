@@ -100,9 +100,11 @@ export default function MainCategoriesPage() {
           </section>
 
           <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-              <h2 className="text-right text-lg font-semibold text-slate-700">التصنيفات الأساسية</h2>
-              <div className="flex items-center gap-2">
+            <div
+              className="grid grid-cols-1 gap-3 border-b border-slate-200 px-4 py-3 md:grid-cols-[1fr_auto_1fr] md:items-center"
+              dir="ltr"
+            >
+              <div className="flex flex-wrap items-center justify-start gap-2">
                 <Link
                   href="/projects-pages/categories/sub"
                   className="rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
@@ -112,20 +114,34 @@ export default function MainCategoriesPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(true)}
-                  className="rounded-full bg-brand-900 px-4 py-2 text-sm text-white transition hover:bg-brand-800"
+                  className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600"
                 >
-                  إضافة تصنيف أساسي +
+                  تصنيف أساسي جديد
                 </button>
+              </div>
+              <div className="flex justify-center">
                 <div className="app-search">
-                  <span className="grid h-10 w-10 place-items-center bg-emerald-500 text-white">🔍</span>
                   <input
-                    className="app-search-input h-10 w-48 px-3 text-sm outline-none"
+                    className="app-search-input h-10 w-48 px-3 text-right text-sm outline-none"
                     placeholder="بحث"
+                    dir="rtl"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
                   />
+                  <svg
+                    aria-hidden="true"
+                    viewBox="0 0 24 24"
+                    className="app-search-icon h-4 w-4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="M20 20l-3.5-3.5" />
+                  </svg>
                 </div>
               </div>
+              <h2 className="text-right text-lg font-semibold text-slate-700" dir="rtl">التصنيفات الأساسية</h2>
             </div>
 
             <div className="overflow-x-auto">
