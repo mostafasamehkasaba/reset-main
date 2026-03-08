@@ -1,5 +1,6 @@
 "use client";
 
+import { useParams } from "next/navigation";
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -17,7 +18,6 @@ import TopNav from "../../../components/TopNav";
 import { getErrorMessage } from "../../../lib/fetcher";
 import { getClient } from "../../../services/clients";
 import type { Client } from "../../../types";
-import type { ClientViewPageProps } from "../../../types";
 
 ChartJS.register(
   CategoryScale,
@@ -87,8 +87,9 @@ const chartOptions = {
   },
 };
 
-export default function ClientViewPage({ params }: ClientViewPageProps) {
-  const clientId = Number(params.id);
+export default function ClientViewPage() {
+  const params = useParams<{ id: string }>();
+  const clientId = Number(params?.id);
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");

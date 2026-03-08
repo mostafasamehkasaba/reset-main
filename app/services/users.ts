@@ -1,5 +1,13 @@
 import { getStoredAuthToken } from "../lib/auth-session";
-import { apiRequest } from "../lib/fetcher";
+import { ApiError, apiRequest } from "../lib/fetcher";
+import {
+  getNextNumericId,
+  isRecoverableApiError,
+  loadStoredValue,
+  mergeUniqueByKey,
+  saveStoredValue,
+  upsertByKey,
+} from "../lib/local-fallback";
 import type { AppUser, UserRole, UserStatus } from "../types";
 
 export type UserPayload = {
@@ -9,6 +17,34 @@ export type UserPayload = {
   role: UserRole;
   status: UserStatus;
 };
+
+export type CreateUserPayload = UserPayload & {
+  password: string;
+  passwordConfirmation: string;
+};
+
+const USERS_STORAGE_KEY = "reset-main-users-v1";
+
+const defaultUsers: AppUser[] = [
+  {
+    id: 1,
+    name: "مدير النظام",
+    email: "admin@example.com",
+    phone: "+968 9000 0001",
+    role: "مدير",
+    status: "نشط",
+    joinedAt: "2026-01-01",
+  },
+  {
+    id: 2,
+    name: "محاسب رئيسي",
+    email: "accountant@example.com",
+    phone: "+968 9000 0002",
+    role: "محاسب",
+    status: "نشط",
+    joinedAt: "2026-01-05",
+  },
+];
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -53,9 +89,11 @@ const normalizeRole = (value: unknown): UserRole => {
   ) {
     return "مدير";
   }
+
   if (normalized === "accountant" || normalized === "finance" || normalized === "محاسب") {
     return "محاسب";
   }
+
   if (normalized === "viewer" || normalized === "read_only" || normalized === "مشاهدة فقط") {
     return "مشاهدة فقط";
   }
@@ -65,12 +103,12 @@ const normalizeRole = (value: unknown): UserRole => {
 
 const normalizeStatus = (value: unknown): UserStatus => {
   const normalized = getFirstText(value).toLowerCase();
+
   if (
     normalized === "inactive" ||
     normalized === "disabled" ||
     normalized === "suspended" ||
-    normalized === "معلق" ||
-    normalized === "معلّق"
+    normalized === "معلق"
   ) {
     return "معلّق";
   }
@@ -114,15 +152,6 @@ const extractCollection = (payload: unknown): unknown[] => {
   return [];
 };
 
-const requireToken = () => {
-  const token = getStoredAuthToken();
-  if (!token) {
-    throw new Error("الجلسة غير متاحة. سجل الدخول أولًا.");
-  }
-
-  return token;
-};
-
 const buildRequestBody = (user: UserPayload) => ({
   name: user.name,
   full_name: user.name,
@@ -133,37 +162,178 @@ const buildRequestBody = (user: UserPayload) => ({
   status: user.status,
 });
 
-export const listUsers = async () => {
-  const payload = await apiRequest<unknown>("/api/users", {
-    token: requireToken(),
+const buildCreateRequestBody = (user: CreateUserPayload) => ({
+  ...buildRequestBody(user),
+  password: user.password,
+  password_confirmation: user.passwordConfirmation,
+});
+
+const mergeCreatedUser = (user: AppUser, payload: UserPayload): AppUser => ({
+  ...user,
+  phone: payload.phone,
+  role: payload.role,
+  status: payload.status,
+  joinedAt: user.joinedAt || new Date().toISOString().slice(0, 10),
+});
+
+const getUserKey = (user: AppUser) =>
+  getFirstText(user.email, `${user.name}-${user.phone}`, String(user.id));
+
+const loadLocalUsers = () =>
+  loadStoredValue(USERS_STORAGE_KEY, defaultUsers, (value) => {
+    if (!Array.isArray(value) || value.length === 0) {
+      return defaultUsers;
+    }
+
+    return value.map((user, index) => normalizeUser(user, index));
   });
 
-  return extractCollection(payload).map((user, index) => normalizeUser(user, index));
+const saveLocalUsers = (users: AppUser[]) => {
+  saveStoredValue(USERS_STORAGE_KEY, users);
 };
 
-export const createUser = async (payload: UserPayload) => {
-  const response = await apiRequest<unknown>("/api/users", {
-    method: "POST",
-    token: requireToken(),
-    body: JSON.stringify(buildRequestBody(payload)),
-  });
-  const record = asRecord(response);
-  return normalizeUser(record?.data || record?.user || response, 0);
+const persistUser = (user: AppUser) => {
+  const users = loadLocalUsers();
+  saveLocalUsers(upsertByKey(users, user, getUserKey));
+};
+
+const createLocalUser = (payload: CreateUserPayload) => {
+  const users = loadLocalUsers();
+  const createdUser = normalizeUser(
+    {
+      ...buildRequestBody(payload),
+      id: getNextNumericId(users, (entry) => entry.id),
+      joined_at: new Date().toISOString().slice(0, 10),
+    },
+    users.length
+  );
+
+  saveLocalUsers(upsertByKey(users, createdUser, getUserKey));
+  return createdUser;
+};
+
+const updateLocalUser = (userId: number, payload: UserPayload) => {
+  const users = loadLocalUsers();
+  const existingUser = users.find((user) => user.id === userId);
+  const nextUser = normalizeUser(
+    {
+      ...(existingUser || {}),
+      ...buildRequestBody(payload),
+      id: userId,
+      joined_at: existingUser?.joinedAt || new Date().toISOString().slice(0, 10),
+    },
+    0
+  );
+
+  saveLocalUsers(
+    users.map((user) => (user.id === userId ? nextUser : user))
+  );
+
+  return nextUser;
+};
+
+const removeLocalUser = (userId: number) => {
+  const users = loadLocalUsers();
+  saveLocalUsers(users.filter((user) => user.id !== userId));
+};
+
+export const listUsers = async () => {
+  const localUsers = loadLocalUsers();
+
+  try {
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>("/api/users", {
+      ...(token ? { token } : {}),
+    });
+    const remoteUsers = extractCollection(payload).map((user, index) => normalizeUser(user, index));
+    const mergedUsers = mergeUniqueByKey(localUsers, remoteUsers, getUserKey);
+    saveLocalUsers(mergedUsers);
+    return mergedUsers;
+  } catch (error) {
+    if (isRecoverableApiError(error)) {
+      return localUsers;
+    }
+
+    throw error;
+  }
+};
+
+export const createUser = async (payload: CreateUserPayload) => {
+  try {
+    const response = await apiRequest<unknown>("/api/register", {
+      method: "POST",
+      body: JSON.stringify(buildCreateRequestBody(payload)),
+    });
+    const record = asRecord(response);
+    const createdUser = mergeCreatedUser(
+      normalizeUser(record?.data || record?.user || response, 0),
+      payload
+    );
+
+    if (createdUser.id > 0) {
+      try {
+        const updatedUser = await updateUser(createdUser.id, payload);
+        persistUser(updatedUser);
+        return updatedUser;
+      } catch (error) {
+        if (!isRecoverableApiError(error)) {
+          throw error;
+        }
+      }
+    }
+
+    persistUser(createdUser);
+    return createdUser;
+  } catch (error) {
+    if (isRecoverableApiError(error)) {
+      return createLocalUser(payload);
+    }
+
+    throw error;
+  }
 };
 
 export const updateUser = async (userId: number, payload: UserPayload) => {
-  const response = await apiRequest<unknown>(`/api/users/${userId}`, {
-    method: "PUT",
-    token: requireToken(),
-    body: JSON.stringify(buildRequestBody(payload)),
-  });
-  const record = asRecord(response);
-  return normalizeUser(record?.data || record?.user || response, 0);
+  try {
+    const token = getStoredAuthToken();
+    const response = await apiRequest<unknown>(`/api/users/${userId}`, {
+      method: "PUT",
+      ...(token ? { token } : {}),
+      body: JSON.stringify(buildRequestBody(payload)),
+    });
+    const record = asRecord(response);
+    const updatedUser = normalizeUser(record?.data || record?.user || response, 0);
+    persistUser(updatedUser);
+    return updatedUser;
+  } catch (error) {
+    if (
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && (error.status === 404 || error.status === 405))
+    ) {
+      return updateLocalUser(userId, payload);
+    }
+
+    throw error;
+  }
 };
 
 export const deleteUser = async (userId: number) => {
-  await apiRequest(`/api/users/${userId}`, {
-    method: "DELETE",
-    token: requireToken(),
-  });
+  try {
+    const token = getStoredAuthToken();
+    await apiRequest(`/api/users/${userId}`, {
+      method: "DELETE",
+      ...(token ? { token } : {}),
+    });
+    removeLocalUser(userId);
+  } catch (error) {
+    if (
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && (error.status === 404 || error.status === 405))
+    ) {
+      removeLocalUser(userId);
+      return;
+    }
+
+    throw error;
+  }
 };

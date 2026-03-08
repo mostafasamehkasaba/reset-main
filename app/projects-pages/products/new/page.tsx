@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ChangeEvent, FormEvent, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
+import { getErrorMessage } from "../../../lib/fetcher";
 import {
   createProductCode,
   PRODUCT_TAX_MODES,
@@ -12,7 +13,6 @@ import {
   type ProductTaxMode,
   type ProductUnit,
 } from "../../../lib/product-store";
-import { getErrorMessage } from "../../../lib/fetcher";
 import { createProduct } from "../../../services/products";
 
 type ProductFormState = {
@@ -36,24 +36,19 @@ type ProductFormState = {
   description: string;
 };
 
-const todayDate = () => new Date().toISOString().slice(0, 10);
-const createBarcode = () => Date.now().toString().slice(-12).padStart(12, "0");
+const FALLBACK_PRODUCT_IMAGE = "/file.svg";
 const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 
-const readFileAsDataUrl = (file: File) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-        return;
-      }
+const todayDate = () => new Date().toISOString().slice(0, 10);
+const createBarcode = () => Date.now().toString().slice(-12).padStart(12, "0");
+const hasAcceptedImageExtension = (fileName: string) =>
+  /\.(png|jpe?g|webp|gif|bmp|svg|avif|heic|heif)$/i.test(fileName);
 
-      reject(new Error("تعذر قراءة ملف صورة المنتج."));
-    };
-    reader.onerror = () => reject(new Error("تعذر قراءة ملف صورة المنتج."));
-    reader.readAsDataURL(file);
-  });
+const revokeObjectUrl = (value: string) => {
+  if (value.startsWith("blob:")) {
+    URL.revokeObjectURL(value);
+  }
+};
 
 const createInitialState = (): ProductFormState => ({
   name: "",
@@ -78,20 +73,46 @@ const createInitialState = (): ProductFormState => ({
 
 export default function NewProductPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const imagePreviewUrlRef = useRef("");
   const [form, setForm] = useState<ProductFormState>(createInitialState);
   const [isCodeManuallyEdited, setIsCodeManuallyEdited] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedImageName, setSelectedImageName] = useState("");
+  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
 
-  const imagePreview = form.imageUrl.trim() || "/file.svg";
+  useEffect(() => {
+    return () => {
+      revokeObjectUrl(imagePreviewUrlRef.current);
+    };
+  }, []);
 
   const updateField = <K extends keyof ProductFormState>(
     key: K,
     value: ProductFormState[K]
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const replaceImagePreview = (nextUrl: string) => {
+    setImagePreviewUrl((prev) => {
+      revokeObjectUrl(prev);
+      imagePreviewUrlRef.current = nextUrl;
+      return nextUrl;
+    });
+  };
+
+  const resetImageSelection = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+
+    setSelectedImageFile(null);
+    setSelectedImageName("");
+    replaceImagePreview("");
+    setForm((prev) => ({ ...prev, imageUrl: "" }));
   };
 
   const handleNameChange = (value: string) => {
@@ -107,38 +128,46 @@ export default function NewProductPage() {
     fileInputRef.current?.click();
   };
 
-  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    event.target.value = "";
 
-    if (!file) return;
+    if (!file) {
+      return;
+    }
 
     setSaveMessage("");
 
-    if (!file.type.startsWith("image/")) {
+    const isValidImageFile =
+      file.type.startsWith("image/") || (!file.type && hasAcceptedImageExtension(file.name));
+
+    if (!isValidImageFile) {
       setValidationMessage("يرجى اختيار ملف صورة صالح للمنتج.");
+      resetImageSelection();
+      return;
+    }
+
+    if (file.size === 0) {
+      setValidationMessage("ملف الصورة فارغ. اختر صورة أخرى.");
+      resetImageSelection();
       return;
     }
 
     if (file.size > MAX_IMAGE_SIZE_BYTES) {
       setValidationMessage("حجم صورة المنتج يجب ألا يتجاوز 2 ميجابايت.");
+      resetImageSelection();
       return;
     }
 
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setValidationMessage("");
-      setSelectedImageName(file.name);
-      setForm((prev) => ({ ...prev, imageUrl: dataUrl }));
-    } catch (error) {
-      setValidationMessage(getErrorMessage(error, "تعذر قراءة صورة المنتج."));
-    }
+    setValidationMessage("");
+    setSelectedImageFile(file);
+    setSelectedImageName(file.name);
+    replaceImagePreview(URL.createObjectURL(file));
+    setForm((prev) => ({ ...prev, imageUrl: "" }));
   };
 
   const handleRemoveImage = () => {
-    setSelectedImageName("");
     setValidationMessage("");
-    setForm((prev) => ({ ...prev, imageUrl: "" }));
+    resetImageSelection();
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -179,7 +208,8 @@ export default function NewProductPage() {
         minStockLevel,
         reorderPoint,
         description: form.description.trim() || "-",
-        imageUrl: form.imageUrl.trim() || "/file.svg",
+        imageUrl: form.imageUrl.trim() || FALLBACK_PRODUCT_IMAGE,
+        imageFile: selectedImageFile,
         dateAdded: form.dateAdded,
         status: form.status,
         currency: form.currency,
@@ -195,7 +225,7 @@ export default function NewProductPage() {
         currency: prev.currency,
       }));
       setIsCodeManuallyEdited(false);
-      setSelectedImageName("");
+      resetImageSelection();
     } catch (error) {
       setValidationMessage(getErrorMessage(error, "تعذر حفظ المنتج."));
     } finally {
@@ -213,9 +243,7 @@ export default function NewProductPage() {
       >
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
           <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">
-              إضافة منتج جديد
-            </div>
+            <div className="text-right text-lg font-semibold text-slate-700">إضافة منتج جديد</div>
             <Link
               href="/projects-pages/products"
               className="rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-600"
@@ -266,14 +294,14 @@ export default function NewProductPage() {
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-700">صورة المنتج</label>
                 <img
-                  src={imagePreview}
+                  src={imagePreviewUrl || form.imageUrl || FALLBACK_PRODUCT_IMAGE}
                   alt="صورة المنتج"
                   className="h-28 w-full rounded-md border border-slate-200 bg-slate-50 object-contain p-3"
                 />
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif"
                   className="hidden"
                   onChange={handleImageChange}
                   disabled={isSubmitting}
@@ -287,9 +315,9 @@ export default function NewProductPage() {
                   {selectedImageName ? "تغيير صورة المنتج" : "رفع صورة المنتج"}
                 </button>
                 <div className="text-xs text-slate-500">
-                  {selectedImageName || "JPG, PNG, WEBP حتى 2MB"}
+                  {selectedImageName || "JPG, PNG, WEBP, HEIC حتى 2MB"}
                 </div>
-                {form.imageUrl ? (
+                {selectedImageFile || form.imageUrl ? (
                   <button
                     type="button"
                     onClick={handleRemoveImage}
@@ -299,13 +327,6 @@ export default function NewProductPage() {
                     إزالة الصورة
                   </button>
                 ) : null}
-                <input
-                  type="hidden"
-                  value={form.imageUrl}
-                  onChange={(event) => updateField("imageUrl", event.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="رابط الصورة (اختياري)"
-                />
               </div>
             </aside>
 
@@ -451,9 +472,7 @@ export default function NewProductPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">
-                      حد إعادة الطلب
-                    </label>
+                    <label className="text-sm font-semibold text-slate-700">حد إعادة الطلب</label>
                     <input
                       type="number"
                       min="0"

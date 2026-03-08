@@ -32,10 +32,16 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
   return value as Record<string, unknown>;
 };
 
+const isHtmlDocument = (value: string) => /^<!doctype html/i.test(value) || /^<html/i.test(value);
+
 const getMessageFromPayload = (payload: unknown): string | null => {
   if (typeof payload === "string") {
     const normalized = payload.trim();
-    return normalized || null;
+    if (!normalized || isHtmlDocument(normalized)) {
+      return null;
+    }
+
+    return normalized;
   }
 
   const record = asRecord(payload);
@@ -135,7 +141,12 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
-    const message = getMessageFromPayload(payload) || `فشل الطلب (${response.status}).`;
+    const message =
+      getMessageFromPayload(payload) ||
+      (response.status >= 500
+        ? `الخادم الخارجي غير متاح حاليًا (${response.status}).`
+        : `فشل الطلب (${response.status}).`);
+
     throw new ApiError(message, response.status, payload);
   }
 

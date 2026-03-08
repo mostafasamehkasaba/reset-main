@@ -84,13 +84,13 @@ export default function InvoicesPage() {
     [deleteInvoiceId, invoicesList]
   );
 
-  const handleDeleteInvoice = async (invoiceId: string) => {
+  const handleDeleteInvoice = async (invoice: Invoice) => {
     setDeleteError("");
     setIsDeleting(true);
 
     try {
-      await deleteInvoice(invoiceId);
-      setInvoicesList((prev) => prev.filter((invoice) => invoice.id !== invoiceId));
+      await deleteInvoice(invoice);
+      setInvoicesList((prev) => prev.filter((entry) => entry.id !== invoice.id));
       setDeleteInvoiceId(null);
     } catch (error) {
       setDeleteError(getErrorMessage(error, "تعذر حذف الفاتورة."));
@@ -354,8 +354,8 @@ export default function InvoicesPage() {
           setDeleteInvoiceId(null);
         }}
         onConfirm={() => {
-          if (deleteInvoiceId === null || isDeleting) return;
-          void handleDeleteInvoice(deleteInvoiceId);
+          if (!selectedDeleteInvoice || isDeleting) return;
+          void handleDeleteInvoice(selectedDeleteInvoice);
         }}
       />
     </div>

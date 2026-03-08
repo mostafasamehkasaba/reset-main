@@ -259,7 +259,11 @@ export default function ClientsPage() {
               </a>
               <a
                 className="rounded-md border border-slate-200 bg-white px-3 py-2 text-center text-slate-600 hover:bg-slate-50"
-                href="/projects-pages/clients/new"
+                href={
+                  selectedClient
+                    ? `/projects-pages/clients/new?id=${selectedClient.id}`
+                    : "/projects-pages/clients/new"
+                }
               >
                 تعديل
               </a>

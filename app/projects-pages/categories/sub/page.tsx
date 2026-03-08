@@ -2,20 +2,25 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import ConfirmDeleteModal from "../../../components/ConfirmDeleteModal";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import { getErrorMessage } from "../../../lib/fetcher";
-import { createSubCategory, listCategories } from "../../../services/categories";
+import {
+  createSubCategory,
+  deleteSubCategory,
+  listCategories,
+} from "../../../services/categories";
 import type { CategoryStatus, MainCategory, SubCategory } from "../../../types";
 
 const statusLabelMap: Record<string, string> = {
-  "نشط": "نشط",
+  نشط: "نشط",
   "معلّق": "معلق",
-  "معلق": "معلق",
-  "active": "نشط",
-  "inactive": "معلق",
-  "disabled": "معلق",
-  "paused": "معلق",
+  معلق: "معلق",
+  active: "نشط",
+  inactive: "معلق",
+  disabled: "معلق",
+  paused: "معلق",
 };
 
 const getStatusLabel = (value: string) => statusLabelMap[value] ?? value;
@@ -25,10 +30,13 @@ export default function SubCategoriesPage() {
   const [query, setQuery] = useState("");
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([]);
+  const [deleteCategoryId, setDeleteCategoryId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newSubCategory, setNewSubCategory] = useState({
     name: "",
@@ -50,7 +58,7 @@ export default function SubCategoriesPage() {
         setSubCategories(data.subCategories);
         setNewSubCategory((prev) => ({
           ...prev,
-          mainCategoryId: data.mainCategories[0]?.id ?? 0,
+          mainCategoryId: prev.mainCategoryId || data.mainCategories[0]?.id || 0,
         }));
       } catch (error) {
         if (!active) return;
@@ -74,6 +82,7 @@ export default function SubCategoriesPage() {
   const filteredSubCategories = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return subCategories;
+
     return subCategories.filter((item) =>
       [item.name, mainById[item.mainCategoryId] ?? "", item.status, getStatusLabel(item.status)]
         .join(" ")
@@ -92,6 +101,11 @@ export default function SubCategoriesPage() {
     [subCategories]
   );
 
+  const selectedDeleteCategory = useMemo(
+    () => subCategories.find((category) => category.id === deleteCategoryId) ?? null,
+    [deleteCategoryId, subCategories]
+  );
+
   const handleAddSubCategory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!newSubCategory.name.trim() || !newSubCategory.mainCategoryId) return;
@@ -107,16 +121,31 @@ export default function SubCategoriesPage() {
       });
 
       setSubCategories((prev) => [category, ...prev]);
-      setNewSubCategory({
+      setNewSubCategory((prev) => ({
+        ...prev,
         name: "",
-        mainCategoryId: mainCategories[0]?.id ?? 0,
         status: "نشط",
-      });
+      }));
       setShowAddModal(false);
     } catch (error) {
       setSaveError(getErrorMessage(error, "تعذر حفظ التصنيف الفرعي."));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: number) => {
+    setDeleteError("");
+    setIsDeleting(true);
+
+    try {
+      await deleteSubCategory(categoryId);
+      setSubCategories((prev) => prev.filter((category) => category.id !== categoryId));
+      setDeleteCategoryId(null);
+    } catch (error) {
+      setDeleteError(getErrorMessage(error, "تعذر حذف التصنيف الفرعي."));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -150,6 +179,12 @@ export default function SubCategoriesPage() {
           {saveError ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {saveError}
+            </div>
+          ) : null}
+
+          {deleteError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {deleteError}
             </div>
           ) : null}
 
@@ -201,45 +236,46 @@ export default function SubCategoriesPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
+              <table className="w-full min-w-[820px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">#</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-right">اسم التصنيف</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">التصنيف الأساسي</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">المنتجات</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الحالة</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">#</th>
+                    <th className="px-2 py-2 text-right sm:px-3 sm:py-3">اسم التصنيف</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">التصنيف الأساسي</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">المنتجات</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الحالة</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الحذف</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                      <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
                         جارٍ تحميل التصنيفات الفرعية...
                       </td>
                     </tr>
                   ) : filteredSubCategories.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
-                        لا توجد تصنيفات فرعية من الـ API حاليًا.
+                      <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                        لا توجد تصنيفات فرعية حاليًا.
                       </td>
                     </tr>
                   ) : (
                     filteredSubCategories.map((category, index) => (
                       <tr key={category.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                        <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
                           {category.id}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">
+                        <td className="px-2 py-2 text-right font-semibold text-slate-800 sm:px-3 sm:py-3">
                           {category.name}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
+                        <td className="px-2 py-2 text-center text-slate-600 sm:px-3 sm:py-3">
                           {mainById[category.mainCategoryId] ?? "-"}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                        <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
                           {category.products}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center">
+                        <td className="px-2 py-2 text-center sm:px-3 sm:py-3">
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-semibold ${
                               isActiveStatus(category.status)
@@ -249,6 +285,15 @@ export default function SubCategoriesPage() {
                           >
                             {getStatusLabel(category.status)}
                           </span>
+                        </td>
+                        <td className="px-2 py-2 text-center sm:px-3 sm:py-3">
+                          <button
+                            type="button"
+                            onClick={() => setDeleteCategoryId(category.id)}
+                            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                          >
+                            حذف
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -276,7 +321,7 @@ export default function SubCategoriesPage() {
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
-                ×
+                x
               </button>
             </div>
 
@@ -352,6 +397,25 @@ export default function SubCategoriesPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDeleteModal
+        open={deleteCategoryId !== null}
+        title="تأكيد حذف التصنيف الفرعي"
+        message={
+          selectedDeleteCategory
+            ? `هل تريد حذف التصنيف الفرعي "${selectedDeleteCategory.name}"؟`
+            : "هل تريد حذف هذا التصنيف الفرعي؟"
+        }
+        isProcessing={isDeleting}
+        onClose={() => {
+          if (isDeleting) return;
+          setDeleteCategoryId(null);
+        }}
+        onConfirm={() => {
+          if (deleteCategoryId === null || isDeleting) return;
+          void handleDeleteCategory(deleteCategoryId);
+        }}
+      />
     </div>
   );
 }

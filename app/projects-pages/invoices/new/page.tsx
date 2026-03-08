@@ -8,7 +8,7 @@ import TopNav from "../../../components/TopNav";
 import { type Product } from "../../../lib/product-store";
 import { getErrorMessage } from "../../../lib/fetcher";
 import { listClients } from "../../../services/clients";
-import { createInvoice } from "../../../services/invoices";
+import { createInvoice, type InvoicePaymentStatus } from "../../../services/invoices";
 import { listProducts } from "../../../services/products";
 import { emptySettings, getSettings, type AppSettings } from "../../../services/settings";
 import type { Client } from "../../../types";
@@ -133,6 +133,14 @@ const paymentStatuses: PaymentStatus[] = [
   "ملغاة",
 ];
 
+const paymentStatusApiMap: Record<PaymentStatus, InvoicePaymentStatus> = {
+  مسودة: "draft",
+  مدفوعة: "paid",
+  "غير مدفوعة": "unpaid",
+  "مدفوعة جزئيا": "partial",
+  ملغاة: "cancelled",
+};
+
 const currencies: Array<{ code: string; label: string }> = [
   { code: "OMR", label: "ريال عماني" },
   { code: "SAR", label: "ريال سعودي" },
@@ -159,6 +167,7 @@ export default function NewInvoicePage() {
   const [dueDate, setDueDate] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("مسودة");
+  const [partialPaidAmount, setPartialPaidAmount] = useState("0");
   const [defaultTaxRate, setDefaultTaxRate] = useState("15");
   const [notes, setNotes] = useState("");
   const [invoiceSequence, setInvoiceSequence] = useState(1);
@@ -201,11 +210,10 @@ export default function NewInvoicePage() {
         setCompanySettings(settingsData);
         setNotes(settingsData.invoiceNotes || "");
 
-        const defaultRow = makeProductRow(
-          1,
-          productsData,
-          toPositiveNumber(defaultTaxRate, 0)
-        );
+        const defaultRow =
+          productsData.length > 0
+            ? makeProductRow(1, productsData, toPositiveNumber(defaultTaxRate, 0))
+            : makeServiceRow(1, toPositiveNumber(defaultTaxRate, 0));
         setLineItems([defaultRow]);
         setNextLineId(2);
       } catch (error) {
@@ -214,7 +222,7 @@ export default function NewInvoicePage() {
         setAvailableProducts([]);
         setClientsList([]);
         setCompanySettings(emptySettings);
-        const defaultRow = makeProductRow(1, [], toPositiveNumber(defaultTaxRate, 0));
+        const defaultRow = makeServiceRow(1, toPositiveNumber(defaultTaxRate, 0));
         setLineItems([defaultRow]);
         setNextLineId(2);
       }
@@ -269,6 +277,20 @@ export default function NewInvoicePage() {
     );
   }, [lineItems]);
 
+  const paidAmount = useMemo(() => {
+    if (paymentStatus === "مدفوعة") {
+      return summary.grandTotal;
+    }
+
+    if (paymentStatus === "مدفوعة جزئيا") {
+      return Math.min(summary.grandTotal, toPositiveNumber(partialPaidAmount, 0));
+    }
+
+    return 0;
+  }, [partialPaidAmount, paymentStatus, summary.grandTotal]);
+
+  const paymentStatusApiValue = paymentStatusApiMap[paymentStatus];
+
   const selectedDeleteRow = useMemo(
     () => lineItems.find((item) => item.id === deleteRowId) ?? null,
     [lineItems, deleteRowId]
@@ -295,6 +317,11 @@ export default function NewInvoicePage() {
   };
 
   const addProductRow = () => {
+    if (availableProducts.length === 0) {
+      setValidationMessage("لا توجد منتجات مضافة بعد. أضف منتجًا أولًا أو استخدم خدمة.");
+      return;
+    }
+
     const row = makeProductRow(
       nextLineId,
       availableProducts,
@@ -346,8 +373,9 @@ export default function NewInvoicePage() {
     const nextSequence = invoiceSequence + 1;
     setInvoiceSequence(nextSequence);
     setInvoiceNumber(formatInvoiceNumber(nextSequence));
-    window.localStorage.setItem(INVOICE_SEQUENCE_KEY, String(invoiceSequence));
+    window.localStorage.setItem(INVOICE_SEQUENCE_KEY, String(nextSequence));
     setPaymentStatus("مسودة");
+    setPartialPaidAmount("0");
     setPaymentMethod("cash");
     setIssueDate(todayDate());
     setDueDate("");
@@ -360,7 +388,11 @@ export default function NewInvoicePage() {
     setContractFile(null);
     setDesignFile(null);
     setPurchaseOrderFile(null);
-    setLineItems([makeProductRow(1, availableProducts, toPositiveNumber(defaultTaxRate, 0))]);
+    setLineItems([
+      availableProducts.length > 0
+        ? makeProductRow(1, availableProducts, toPositiveNumber(defaultTaxRate, 0))
+        : makeServiceRow(1, toPositiveNumber(defaultTaxRate, 0)),
+    ]);
     setNextLineId(2);
   };
 
@@ -520,6 +552,10 @@ export default function NewInvoicePage() {
       setValidationMessage("يجب اختيار العميل من القائمة.");
       return;
     }
+    if (!issueDate) {
+      setValidationMessage("حدد تاريخ الفاتورة.");
+      return;
+    }
     if (lineItems.length === 0) {
       setValidationMessage("أضف منتجًا أو خدمة واحدة على الأقل.");
       return;
@@ -528,9 +564,28 @@ export default function NewInvoicePage() {
       setValidationMessage("كل سطر يجب أن يحتوي على اسم منتج أو خدمة.");
       return;
     }
+    if (
+      lineItems.some(
+        (item) => item.itemType === "product" && !Number.isInteger(item.productId ?? Number.NaN)
+      )
+    ) {
+      setValidationMessage("اختر منتجًا صالحًا لكل سطر منتج، أو غيّر السطر إلى خدمة.");
+      return;
+    }
     if (paymentMethod === "credit" && !dueDate) {
       setValidationMessage("حدد تاريخ الاستحقاق لأن طريقة الدفع آجل.");
       return;
+    }
+    if (paymentStatus === "مدفوعة جزئيا") {
+      if (paidAmount <= 0) {
+        setValidationMessage("حدد مبلغًا مدفوعًا أكبر من صفر للحالة مدفوعة جزئيا.");
+        return;
+      }
+
+      if (paidAmount >= summary.grandTotal) {
+        setValidationMessage("المبلغ المدفوع جزئيًا يجب أن يكون أقل من إجمالي الفاتورة.");
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -540,7 +595,7 @@ export default function NewInvoicePage() {
         invoiceNumber,
         issueDate,
         dueDate: dueDate || undefined,
-        status: paymentStatus,
+        status: paymentStatusApiValue,
         currency,
         paymentMethod,
         clientId: selectedClient.id,
@@ -549,6 +604,7 @@ export default function NewInvoicePage() {
         clientPhone: clientPhone.trim(),
         clientAddress: clientAddress.trim(),
         notes: notes.trim(),
+        paidAmount,
         totals: {
           subtotal: summary.subtotal,
           discount: summary.discount,
@@ -557,7 +613,9 @@ export default function NewInvoicePage() {
         },
         items: lineItems.map((item) => ({
           itemType: item.itemType,
-          productId: item.itemType === "product" ? item.productId : null,
+          ...(item.itemType === "product" && typeof item.productId === "number"
+            ? { productId: item.productId }
+            : {}),
           name: item.name.trim(),
           price: item.price,
           quantity: item.quantity,
@@ -696,7 +754,13 @@ export default function NewInvoicePage() {
                 <label className="text-sm font-semibold text-slate-700">حالة الدفع</label>
                 <select
                   value={paymentStatus}
-                  onChange={(event) => setPaymentStatus(event.target.value as PaymentStatus)}
+                  onChange={(event) => {
+                    const nextStatus = event.target.value as PaymentStatus;
+                    setPaymentStatus(nextStatus);
+                    if (nextStatus !== "مدفوعة جزئيا") {
+                      setPartialPaidAmount("0");
+                    }
+                  }}
                   className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 >
                   {paymentStatuses.map((status) => (
@@ -706,6 +770,23 @@ export default function NewInvoicePage() {
                   ))}
                 </select>
               </div>
+
+              {paymentStatus === "مدفوعة جزئيا" ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">المبلغ المدفوع</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={partialPaidAmount}
+                    onChange={(event) => setPartialPaidAmount(event.target.value)}
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <p className="text-xs text-slate-500">
+                    أدخل مبلغًا أقل من إجمالي الفاتورة: {formatMoney(summary.grandTotal)} {currency}
+                  </p>
+                </div>
+              ) : null}
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-700">
@@ -834,7 +915,8 @@ export default function NewInvoicePage() {
                   <button
                     type="button"
                     onClick={addProductRow}
-                    className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                    disabled={availableProducts.length === 0}
+                    className="rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     إضافة منتج
                   </button>
@@ -847,6 +929,12 @@ export default function NewInvoicePage() {
                   </button>
                 </div>
               </div>
+
+              {availableProducts.length === 0 ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  لا توجد منتجات مرتبطة حاليًا، لذلك ستنشأ الفاتورة كبنود خدمات فقط حتى تضيف منتجًا.
+                </div>
+              ) : null}
 
               <div className="overflow-hidden rounded-lg border border-slate-200">
                 <div className="overflow-x-auto">
@@ -890,7 +978,9 @@ export default function NewInvoicePage() {
                                 }}
                                 className="w-full rounded-md border border-slate-200 bg-white px-2 py-1"
                               >
-                                <option value="product">منتج</option>
+                                <option value="product" disabled={availableProducts.length === 0}>
+                                  منتج
+                                </option>
                                 <option value="service">خدمة</option>
                               </select>
                             </td>
@@ -903,11 +993,15 @@ export default function NewInvoicePage() {
                                   }
                                   className="w-full rounded-md border border-slate-200 bg-white px-2 py-1"
                                 >
-                                  {availableProducts.map((product) => (
-                                    <option key={product.id} value={product.id}>
-                                      {product.name}
-                                    </option>
-                                  ))}
+                                  {availableProducts.length > 0 ? (
+                                    availableProducts.map((product) => (
+                                      <option key={product.id} value={product.id}>
+                                        {product.name}
+                                      </option>
+                                    ))
+                                  ) : (
+                                    <option value="">لا توجد منتجات</option>
+                                  )}
                                 </select>
                               ) : (
                                 <input

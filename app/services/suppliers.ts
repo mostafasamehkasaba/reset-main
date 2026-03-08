@@ -7,6 +7,16 @@ import {
   toSupplierStatusApiValue,
 } from "../lib/api-lookups";
 import { apiRequest } from "../lib/fetcher";
+import {
+  getNextNumericId,
+  isRecoverableApiError,
+  mergeUniqueByKey,
+  upsertByKey,
+} from "../lib/local-fallback";
+import {
+  loadSuppliersFromStorage,
+  saveSuppliersToStorage,
+} from "../lib/supplier-store";
 import type { Supplier, SupplierStatus } from "../types";
 
 export type SupplierPayload = {
@@ -53,7 +63,9 @@ const getFirstNumber = (...values: unknown[]) => {
 
     if (typeof value === "string" && value.trim()) {
       const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
     }
   }
 
@@ -163,38 +175,94 @@ const extractSingleSupplier = (payload: unknown, fallback: SupplierPayload): Sup
   return normalizeSupplier(candidate || fallback, 0);
 };
 
-const requireToken = () => {
-  const token = getStoredAuthToken();
-  if (!token) {
-    throw new Error("الجلسة غير متاحة. سجل الدخول أولًا.");
-  }
+const getSupplierKey = (supplier: Supplier) =>
+  getFirstText(supplier.email, `${supplier.name}-${supplier.phone}`, String(supplier.id));
 
-  return token;
+const persistSupplier = (supplier: Supplier) => {
+  const suppliers = loadSuppliersFromStorage();
+  saveSuppliersToStorage(upsertByKey(suppliers, supplier, getSupplierKey));
+};
+
+const createLocalSupplier = (supplier: SupplierPayload) => {
+  const suppliers = loadSuppliersFromStorage();
+  const createdSupplier = normalizeSupplier(
+    {
+      ...buildRequestBody(supplier),
+      id: getNextNumericId(suppliers, (entry) => entry.id),
+      balance: supplier.openingBalance,
+      orders: 0,
+      joined_at: new Date().toISOString().slice(0, 10),
+    },
+    suppliers.length
+  );
+
+  saveSuppliersToStorage(upsertByKey(suppliers, createdSupplier, getSupplierKey));
+  return createdSupplier;
+};
+
+const removeLocalSupplier = (supplierId: number) => {
+  const suppliers = loadSuppliersFromStorage();
+  saveSuppliersToStorage(suppliers.filter((supplier) => supplier.id !== supplierId));
 };
 
 export const listSuppliers = async () => {
-  const payload = await apiRequest<unknown>("/api/suppliers", {
-    token: requireToken(),
-  });
+  const localSuppliers = loadSuppliersFromStorage();
 
-  return extractCollection(payload).map((supplier, index) =>
-    normalizeSupplier(supplier, index)
-  );
+  try {
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>("/api/suppliers", {
+      ...(token ? { token } : {}),
+    });
+    const remoteSuppliers = extractCollection(payload).map((supplier, index) =>
+      normalizeSupplier(supplier, index)
+    );
+    const mergedSuppliers = mergeUniqueByKey(localSuppliers, remoteSuppliers, getSupplierKey);
+    saveSuppliersToStorage(mergedSuppliers);
+    return mergedSuppliers;
+  } catch (error) {
+    if (isRecoverableApiError(error)) {
+      return localSuppliers;
+    }
+
+    throw error;
+  }
 };
 
 export const createSupplier = async (supplier: SupplierPayload) => {
-  const payload = await apiRequest<unknown>("/api/suppliers", {
-    method: "POST",
-    token: requireToken(),
-    body: JSON.stringify(buildRequestBody(supplier)),
-  });
+  try {
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>("/api/suppliers", {
+      method: "POST",
+      ...(token ? { token } : {}),
+      body: JSON.stringify(buildRequestBody(supplier)),
+    });
 
-  return extractSingleSupplier(payload, supplier);
+    const createdSupplier = extractSingleSupplier(payload, supplier);
+    persistSupplier(createdSupplier);
+    return createdSupplier;
+  } catch (error) {
+    if (isRecoverableApiError(error)) {
+      return createLocalSupplier(supplier);
+    }
+
+    throw error;
+  }
 };
 
 export const deleteSupplier = async (supplierId: number) => {
-  await apiRequest(`/api/suppliers/${supplierId}`, {
-    method: "DELETE",
-    token: requireToken(),
-  });
+  try {
+    const token = getStoredAuthToken();
+    await apiRequest(`/api/suppliers/${supplierId}`, {
+      method: "DELETE",
+      ...(token ? { token } : {}),
+    });
+    removeLocalSupplier(supplierId);
+  } catch (error) {
+    if (isRecoverableApiError(error)) {
+      removeLocalSupplier(supplierId);
+      return;
+    }
+
+    throw error;
+  }
 };

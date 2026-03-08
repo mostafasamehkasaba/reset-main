@@ -2,20 +2,25 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import ConfirmDeleteModal from "../../../components/ConfirmDeleteModal";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import { getErrorMessage } from "../../../lib/fetcher";
-import { createMainCategory, listCategories } from "../../../services/categories";
+import {
+  createMainCategory,
+  deleteMainCategory,
+  listCategories,
+} from "../../../services/categories";
 import type { CategoryStatus, MainCategory, SubCategory } from "../../../types";
 
 const statusLabelMap: Record<string, string> = {
-  "نشط": "نشط",
+  نشط: "نشط",
   "معلّق": "معلق",
-  "معلق": "معلق",
-  "active": "نشط",
-  "inactive": "معلق",
-  "disabled": "معلق",
-  "paused": "معلق",
+  معلق: "معلق",
+  active: "نشط",
+  inactive: "معلق",
+  disabled: "معلق",
+  paused: "معلق",
 };
 
 const getStatusLabel = (value: string) => statusLabelMap[value] ?? value;
@@ -25,10 +30,13 @@ export default function MainCategoriesPage() {
   const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<MainCategory[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  const [deleteCategoryId, setDeleteCategoryId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [saveError, setSaveError] = useState("");
+  const [deleteError, setDeleteError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCategory, setNewCategory] = useState({
     name: "",
@@ -65,6 +73,7 @@ export default function MainCategoriesPage() {
   const filteredCategories = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return categories;
+
     return categories.filter((item) =>
       [item.name, item.code, item.status, getStatusLabel(item.status)]
         .join(" ")
@@ -92,6 +101,11 @@ export default function MainCategoriesPage() {
     [subCategories]
   );
 
+  const selectedDeleteCategory = useMemo(
+    () => categories.find((category) => category.id === deleteCategoryId) ?? null,
+    [categories, deleteCategoryId]
+  );
+
   const handleAddCategory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!newCategory.name.trim()) return;
@@ -117,6 +131,24 @@ export default function MainCategoriesPage() {
       setSaveError(getErrorMessage(error, "تعذر حفظ التصنيف."));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: number) => {
+    setDeleteError("");
+    setIsDeleting(true);
+
+    try {
+      await deleteMainCategory(categoryId);
+      setCategories((prev) => prev.filter((category) => category.id !== categoryId));
+      setSubCategories((prev) =>
+        prev.filter((category) => category.mainCategoryId !== categoryId)
+      );
+      setDeleteCategoryId(null);
+    } catch (error) {
+      setDeleteError(getErrorMessage(error, "تعذر حذف التصنيف الأساسي."));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -150,6 +182,12 @@ export default function MainCategoriesPage() {
           {saveError ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {saveError}
+            </div>
+          ) : null}
+
+          {deleteError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {deleteError}
             </div>
           ) : null}
 
@@ -201,49 +239,50 @@ export default function MainCategoriesPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
+              <table className="w-full min-w-[820px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">#</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-right">اسم التصنيف</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الكود</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">عدد الفرعية</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">المنتجات</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الحالة</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">#</th>
+                    <th className="px-2 py-2 text-right sm:px-3 sm:py-3">اسم التصنيف</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الكود</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">عدد الفرعية</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">المنتجات</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الحالة</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الحذف</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                      <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
                         جارٍ تحميل التصنيفات...
                       </td>
                     </tr>
                   ) : filteredCategories.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
-                        لا توجد تصنيفات من الـ API حاليًا.
+                      <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
+                        لا توجد تصنيفات أساسية حاليًا.
                       </td>
                     </tr>
                   ) : (
                     filteredCategories.map((category, index) => (
                       <tr key={category.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                        <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
                           {category.id}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">
+                        <td className="px-2 py-2 text-right font-semibold text-slate-800 sm:px-3 sm:py-3">
                           {category.name}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
+                        <td className="px-2 py-2 text-center text-slate-600 sm:px-3 sm:py-3">
                           {category.code}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                        <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
                           {subCountByMain[category.id] ?? 0}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                        <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
                           {category.products}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center">
+                        <td className="px-2 py-2 text-center sm:px-3 sm:py-3">
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-semibold ${
                               isActiveStatus(category.status)
@@ -253,6 +292,15 @@ export default function MainCategoriesPage() {
                           >
                             {getStatusLabel(category.status)}
                           </span>
+                        </td>
+                        <td className="px-2 py-2 text-center sm:px-3 sm:py-3">
+                          <button
+                            type="button"
+                            onClick={() => setDeleteCategoryId(category.id)}
+                            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                          >
+                            حذف
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -280,7 +328,7 @@ export default function MainCategoriesPage() {
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
-                ×
+                x
               </button>
             </div>
 
@@ -347,6 +395,25 @@ export default function MainCategoriesPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDeleteModal
+        open={deleteCategoryId !== null}
+        title="تأكيد حذف التصنيف الأساسي"
+        message={
+          selectedDeleteCategory
+            ? `سيتم حذف "${selectedDeleteCategory.name}" وأي تصنيفات فرعية مرتبطة به. هل تريد المتابعة؟`
+            : "هل تريد حذف هذا التصنيف الأساسي؟"
+        }
+        isProcessing={isDeleting}
+        onClose={() => {
+          if (isDeleting) return;
+          setDeleteCategoryId(null);
+        }}
+        onConfirm={() => {
+          if (deleteCategoryId === null || isDeleting) return;
+          void handleDeleteCategory(deleteCategoryId);
+        }}
+      />
     </div>
   );
 }

@@ -72,6 +72,8 @@ export default function UsersPage() {
     name: "",
     email: "",
     phone: "",
+    password: "",
+    passwordConfirmation: "",
     role: defaultRole,
     status: defaultStatus,
   });
@@ -145,11 +147,23 @@ export default function UsersPage() {
 
   const handleAddUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!newUser.name.trim() || !newUser.email.trim() || !newUser.phone.trim()) {
+    if (
+      !newUser.name.trim() ||
+      !newUser.email.trim() ||
+      !newUser.phone.trim() ||
+      !newUser.password ||
+      !newUser.passwordConfirmation
+    ) {
       return;
     }
 
     setActionError("");
+
+    if (newUser.password !== newUser.passwordConfirmation) {
+      setActionError("كلمتا المرور غير متطابقتين.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -157,6 +171,8 @@ export default function UsersPage() {
         name: newUser.name.trim(),
         email: newUser.email.trim(),
         phone: newUser.phone.trim(),
+        password: newUser.password,
+        passwordConfirmation: newUser.passwordConfirmation,
         role: newUser.role,
         status: newUser.status,
       });
@@ -166,6 +182,8 @@ export default function UsersPage() {
         name: "",
         email: "",
         phone: "",
+        password: "",
+        passwordConfirmation: "",
         role: defaultRole,
         status: defaultStatus,
       });
@@ -586,6 +604,36 @@ export default function UsersPage() {
                     ))}
                   </select>
                 </label>
+                <label className="hidden">
+                  كلمة المرور *
+                  <input
+                    type="hidden"
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
+                    value={newUser.password}
+                    onChange={(event) =>
+                      setNewUser((prev) => ({ ...prev, password: event.target.value }))
+                    }
+                    autoComplete="new-password"
+                    minLength={8}
+                  />
+                </label>
+
+                <label className="hidden">
+                  تأكيد كلمة المرور *
+                  <input
+                    type="hidden"
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
+                    value={newUser.passwordConfirmation}
+                    onChange={(event) =>
+                      setNewUser((prev) => ({
+                        ...prev,
+                        passwordConfirmation: event.target.value,
+                      }))
+                    }
+                    autoComplete="new-password"
+                    minLength={8}
+                  />
+                </label>
               </div>
 
               <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
@@ -697,6 +745,38 @@ export default function UsersPage() {
                       </option>
                     ))}
                   </select>
+                </label>
+                <label className="text-sm text-slate-600">
+                  كلمة المرور *
+                  <input
+                    type="password"
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
+                    value={newUser.password}
+                    onChange={(event) =>
+                      setNewUser((prev) => ({ ...prev, password: event.target.value }))
+                    }
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                  />
+                </label>
+
+                <label className="text-sm text-slate-600">
+                  تأكيد كلمة المرور *
+                  <input
+                    type="password"
+                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
+                    value={newUser.passwordConfirmation}
+                    onChange={(event) =>
+                      setNewUser((prev) => ({
+                        ...prev,
+                        passwordConfirmation: event.target.value,
+                      }))
+                    }
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                  />
                 </label>
               </div>
 

@@ -1,9 +1,113 @@
 import { getStoredAuthToken } from "../lib/auth-session";
 import { getCountryLabel, toCountryApiValue } from "../lib/api-lookups";
 import { ApiError, apiRequest } from "../lib/fetcher";
+import {
+  getNextNumericId,
+  isRecoverableApiError,
+  loadStoredValue,
+  mergeUniqueByKey,
+  saveStoredValue,
+  upsertByKey,
+} from "../lib/local-fallback";
 import type { Client, ClientRecentInvoice, ClientStats } from "../types";
 
 export type ClientType = "individual" | "company";
+export type ClientPaymentMethod = "cash" | "transfer" | "card" | "credit";
+
+export type CreateClientPayload = {
+  name: string;
+  type: ClientType;
+  email?: string;
+  phone?: string;
+  country?: string;
+  address?: string;
+  taxNumber?: string;
+  commercialRegister?: string;
+  creditLimit?: number;
+  openingBalance?: number;
+  defaultPaymentMethod?: ClientPaymentMethod;
+  internalNotes?: string;
+  currency?: string;
+};
+
+const CLIENTS_STORAGE_KEY = "reset-main-clients-v1";
+
+const defaultClients: Client[] = [
+  {
+    id: 1,
+    name: "شركة المدار",
+    email: "info@almadar.test",
+    phone: "+968 9000 1001",
+    country: "عمان",
+    address: "مسقط",
+    currency: "OMR",
+    invoices: 2,
+    due: 180,
+    stats: {
+      total: 420,
+      paid: 240,
+      discount: 0,
+      due: 180,
+    },
+    recentInvoices: [
+      {
+        id: 1,
+        products: 2,
+        total: 240,
+        paid: 240,
+        discount: 0,
+        due: 0,
+        currency: "OMR",
+        status: "مدفوعة",
+        date: "2026-02-20",
+        dueDate: "2026-02-20",
+      },
+      {
+        id: 2,
+        products: 1,
+        total: 180,
+        paid: 0,
+        discount: 0,
+        due: 180,
+        currency: "OMR",
+        status: "غير مدفوعة",
+        date: "2026-03-01",
+        dueDate: "2026-03-08",
+      },
+    ],
+  },
+  {
+    id: 2,
+    name: "مؤسسة النور",
+    email: "sales@alnoor.test",
+    phone: "+966 500 000 200",
+    country: "السعودية",
+    address: "الرياض",
+    currency: "SAR",
+    invoices: 1,
+    due: 0,
+    stats: {
+      total: 560,
+      paid: 560,
+      discount: 20,
+      due: 0,
+    },
+    recentInvoices: [
+      {
+        id: 3,
+        products: 3,
+        total: 560,
+        paid: 560,
+        discount: 20,
+        due: 0,
+        currency: "SAR",
+        status: "مدفوعة",
+        date: "2026-02-16",
+        dueDate: "2026-02-18",
+      },
+    ],
+  },
+];
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -31,7 +135,9 @@ const getFirstNumber = (...values: unknown[]) => {
 
     if (typeof value === "string" && value.trim()) {
       const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
     }
   }
 
@@ -40,15 +146,14 @@ const getFirstNumber = (...values: unknown[]) => {
 
 const normalizeStatus = (value: unknown) => {
   const normalized = getFirstText(value).toLowerCase();
+
   if (!normalized) return "مسودة";
   if (normalized === "paid" || normalized === "مدفوعة") return "مدفوعة";
-  if (
-    normalized === "unpaid" ||
-    normalized === "غير مدفوعة" ||
-    normalized === "pending"
-  ) {
+
+  if (normalized === "unpaid" || normalized === "غير مدفوعة" || normalized === "pending") {
     return "غير مدفوعة";
   }
+
   if (
     normalized === "partially_paid" ||
     normalized === "partial" ||
@@ -57,6 +162,7 @@ const normalizeStatus = (value: unknown) => {
   ) {
     return "مدفوعة جزئيا";
   }
+
   if (normalized === "cancelled" || normalized === "canceled" || normalized === "ملغاة") {
     return "ملغاة";
   }
@@ -66,6 +172,7 @@ const normalizeStatus = (value: unknown) => {
 
 const normalizeStats = (value: unknown): ClientStats => {
   const record = asRecord(value) || {};
+
   return {
     total: getFirstNumber(record.total, record.total_amount, record.grand_total),
     paid: getFirstNumber(record.paid, record.paid_amount, record.amount_paid),
@@ -130,6 +237,7 @@ const normalizeClient = (input: unknown, index: number): Client => {
     }),
     { total: 0, paid: 0, discount: 0, due: 0 }
   );
+
   const stats =
     parsedStats.total || parsedStats.paid || parsedStats.discount || parsedStats.due
       ? parsedStats
@@ -138,12 +246,27 @@ const normalizeClient = (input: unknown, index: number): Client => {
   return {
     id: Math.floor(getFirstNumber(record.id, record.client_id, record.customer_id, index + 1)),
     name: getFirstText(record.name, record.client_name, record.customer_name, `عميل ${index + 1}`),
+    type: getFirstText(record.type, record.client_type, record.customer_type, "individual"),
     email: getFirstText(record.email, record.client_email, record.customer_email, "-"),
     phone: getFirstText(record.phone, record.phone_number, record.mobile, "-"),
     country: getCountryLabel(
       getFirstText(record.country, record.country_name, record.nationality, "-")
     ),
     address: getFirstText(record.address, record.address_line, record.street, "-"),
+    taxNumber: getFirstText(record.taxNumber, record.tax_number, "-"),
+    commercialRegister: getFirstText(
+      record.commercialRegister,
+      record.commercial_register,
+      "-"
+    ),
+    creditLimit: getFirstNumber(record.creditLimit, record.credit_limit, 0),
+    openingBalance: getFirstNumber(record.openingBalance, record.opening_balance, 0),
+    defaultPaymentMethod: getFirstText(
+      record.defaultPaymentMethod,
+      record.default_payment_method,
+      "-"
+    ),
+    internalNotes: getFirstText(record.internalNotes, record.internal_notes, record.notes, "-"),
     currency: getFirstText(record.currency, record.currency_code, "OMR"),
     invoices: Math.floor(
       getFirstNumber(
@@ -160,10 +283,14 @@ const normalizeClient = (input: unknown, index: number): Client => {
 };
 
 const extractCollection = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload)) {
+    return payload;
+  }
 
   const record = asRecord(payload);
-  if (!record) return [];
+  if (!record) {
+    return [];
+  }
 
   const candidates = [record.data, record.clients, record.items, record.results];
 
@@ -181,24 +308,7 @@ const extractCollection = (payload: unknown): unknown[] => {
   return [];
 };
 
-const requireToken = () => {
-  const token = getStoredAuthToken();
-  if (!token) {
-    throw new Error("الجلسة غير متاحة. سجل الدخول أولًا.");
-  }
-
-  return token;
-};
-
-const buildRequestBody = (client: {
-  name: string;
-  type: ClientType;
-  email?: string;
-  phone?: string;
-  country?: string;
-  address?: string;
-  currency?: string;
-}) => {
+const buildRequestBody = (client: CreateClientPayload) => {
   const normalizedCountry = client.country ? toCountryApiValue(client.country) : undefined;
 
   return {
@@ -217,57 +327,237 @@ const buildRequestBody = (client: {
     country_name: normalizedCountry ? getCountryLabel(normalizedCountry) : undefined,
     nationality: normalizedCountry ? getCountryLabel(normalizedCountry) : undefined,
     address: client.address,
+    tax_number: client.taxNumber,
+    taxNumber: client.taxNumber,
+    commercial_register: client.commercialRegister,
+    commercialRegister: client.commercialRegister,
+    credit_limit: client.creditLimit,
+    creditLimit: client.creditLimit,
+    opening_balance: client.openingBalance,
+    openingBalance: client.openingBalance,
+    default_payment_method: client.defaultPaymentMethod,
+    defaultPaymentMethod: client.defaultPaymentMethod,
+    internal_notes: client.internalNotes,
+    internalNotes: client.internalNotes,
+    notes: client.internalNotes,
     currency: client.currency,
     currency_code: client.currency,
   };
 };
 
-export const listClients = async () => {
-  const payload = await apiRequest<unknown>("/api/clients", {
-    token: requireToken(),
+const getClientKey = (client: Client) =>
+  getFirstText(client.email, `${client.name}-${client.phone}`, String(client.id));
+
+const loadLocalClients = () =>
+  loadStoredValue(CLIENTS_STORAGE_KEY, defaultClients, (value) => {
+    if (!Array.isArray(value) || value.length === 0) {
+      return defaultClients;
+    }
+
+    return value.map((client, index) => normalizeClient(client, index));
   });
 
-  return extractCollection(payload).map((client, index) => normalizeClient(client, index));
+const saveLocalClients = (clients: Client[]) => {
+  saveStoredValue(CLIENTS_STORAGE_KEY, clients);
 };
 
-export const getClient = async (clientId: number) => {
+const persistClient = (client: Client) => {
+  const clients = loadLocalClients();
+  saveLocalClients(upsertByKey(clients, client, getClientKey));
+};
+
+const buildClientDraft = (client: CreateClientPayload) => ({
+  ...buildRequestBody(client),
+  invoices: 0,
+  due: 0,
+  currency: client.currency || "OMR",
+  currency_code: client.currency || "OMR",
+  stats: {
+    total: 0,
+    paid: 0,
+    discount: 0,
+    due: 0,
+  },
+  recentInvoices: [],
+});
+
+const createLocalClient = (client: CreateClientPayload) => {
+  const clients = loadLocalClients();
+  const createdClient = normalizeClient(
+    {
+      ...buildClientDraft(client),
+      id: getNextNumericId(clients, (entry) => entry.id),
+    },
+    clients.length
+  );
+
+  saveLocalClients(upsertByKey(clients, createdClient, getClientKey));
+  return createdClient;
+};
+
+const updateLocalClient = (clientId: number, client: CreateClientPayload) => {
+  const clients = loadLocalClients();
+  const existingClient = clients.find((entry) => entry.id === clientId);
+  const nextClient = normalizeClient(
+    {
+      ...(existingClient || {}),
+      ...buildClientDraft(client),
+      id: clientId,
+      invoices: existingClient?.invoices ?? 0,
+      due: existingClient?.due ?? 0,
+      stats: existingClient?.stats ?? {
+        total: 0,
+        paid: 0,
+        discount: 0,
+        due: 0,
+      },
+      recentInvoices: existingClient?.recentInvoices ?? [],
+    },
+    0
+  );
+
+  if (!existingClient) {
+    saveLocalClients(upsertByKey(clients, nextClient, getClientKey));
+    return nextClient;
+  }
+
+  saveLocalClients(clients.map((entry) => (entry.id === clientId ? nextClient : entry)));
+  return nextClient;
+};
+
+const removeLocalClient = (clientId: number) => {
+  const clients = loadLocalClients();
+  saveLocalClients(clients.filter((client) => client.id !== clientId));
+};
+
+export const listClients = async () => {
+  const localClients = loadLocalClients();
+
   try {
-    const payload = await apiRequest<unknown>(`/api/clients/${clientId}`, {
-      token: requireToken(),
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>("/api/clients", {
+      ...(token ? { token } : {}),
     });
-    const record = asRecord(payload);
-    return normalizeClient(record?.data || record?.client || payload, 0);
+    const remoteClients = extractCollection(payload).map((client, index) =>
+      normalizeClient(client, index)
+    );
+    const mergedClients = mergeUniqueByKey(localClients, remoteClients, getClientKey);
+    saveLocalClients(mergedClients);
+    return mergedClients;
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 404 || error.status === 405)) {
-      const list = await listClients();
-      return list.find((client) => client.id === clientId) ?? null;
+    if (isRecoverableApiError(error)) {
+      return localClients;
     }
+
     throw error;
   }
 };
 
-export const createClient = async (client: {
-  name: string;
-  type: ClientType;
-  email?: string;
-  phone?: string;
-  country?: string;
-  address?: string;
-  currency?: string;
-}) => {
-  const payload = await apiRequest<unknown>("/api/clients", {
-    method: "POST",
-    token: requireToken(),
-    body: JSON.stringify(buildRequestBody(client)),
-  });
+export const getClient = async (clientId: number) => {
+  try {
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>(`/api/clients/${clientId}`, {
+      ...(token ? { token } : {}),
+    });
+    const record = asRecord(payload);
+    const client = normalizeClient(record?.data || record?.client || payload, 0);
+    persistClient(client);
+    return client;
+  } catch (error) {
+    if (
+      (error instanceof ApiError && (error.status === 404 || error.status === 405)) ||
+      isRecoverableApiError(error)
+    ) {
+      const localClient = loadLocalClients().find((client) => client.id === clientId);
+      if (localClient) {
+        return localClient;
+      }
 
-  const record = asRecord(payload);
-  return normalizeClient(record?.data || record?.client || payload, 0);
+      const clients = await listClients();
+      return clients.find((client) => client.id === clientId) ?? null;
+    }
+
+    throw error;
+  }
+};
+
+export const createClient = async (client: CreateClientPayload) => {
+  try {
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>("/api/clients", {
+      method: "POST",
+      ...(token ? { token } : {}),
+      body: JSON.stringify(buildRequestBody(client)),
+    });
+
+    const record = asRecord(payload);
+    const createdRecord = asRecord(record?.data || record?.client || payload) || {};
+    const createdClient = normalizeClient(
+      {
+        ...buildClientDraft(client),
+        ...createdRecord,
+      },
+      0
+    );
+    persistClient(createdClient);
+    return createdClient;
+  } catch (error) {
+    if (isRecoverableApiError(error)) {
+      return createLocalClient(client);
+    }
+
+    throw error;
+  }
+};
+
+export const updateClient = async (clientId: number, client: CreateClientPayload) => {
+  try {
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>(`/api/clients/${clientId}`, {
+      method: "PUT",
+      ...(token ? { token } : {}),
+      body: JSON.stringify(buildRequestBody(client)),
+    });
+
+    const record = asRecord(payload);
+    const updatedRecord = asRecord(record?.data || record?.client || payload) || {};
+    const updatedClient = normalizeClient(
+      {
+        ...buildClientDraft(client),
+        ...updatedRecord,
+        id: clientId,
+      },
+      0
+    );
+
+    persistClient(updatedClient);
+    return updatedClient;
+  } catch (error) {
+    if (
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && (error.status === 404 || error.status === 405))
+    ) {
+      return updateLocalClient(clientId, client);
+    }
+
+    throw error;
+  }
 };
 
 export const deleteClient = async (clientId: number) => {
-  await apiRequest(`/api/clients/${clientId}`, {
-    method: "DELETE",
-    token: requireToken(),
-  });
+  try {
+    const token = getStoredAuthToken();
+    await apiRequest(`/api/clients/${clientId}`, {
+      method: "DELETE",
+      ...(token ? { token } : {}),
+    });
+    removeLocalClient(clientId);
+  } catch (error) {
+    if (isRecoverableApiError(error)) {
+      removeLocalClient(clientId);
+      return;
+    }
+
+    throw error;
+  }
 };

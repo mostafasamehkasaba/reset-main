@@ -5,8 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopNav from "../../components/TopNav";
 import { getErrorMessage } from "../../lib/fetcher";
-import { listProducts } from "../../services/products";
 import type { Product } from "../../lib/product-store";
+import { listProducts } from "../../services/products";
+
+const FALLBACK_PRODUCT_IMAGE = "/file.svg";
+
+const getProductImageSrc = (value: string) => value.trim() || FALLBACK_PRODUCT_IMAGE;
 
 export default function ProductsPage() {
   const [query, setQuery] = useState("");
@@ -35,6 +39,7 @@ export default function ProductsPage() {
     };
 
     loadData();
+
     return () => {
       active = false;
     };
@@ -42,9 +47,20 @@ export default function ProductsPage() {
 
   const filteredProducts = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return products;
+
+    if (!q) {
+      return products;
+    }
+
     return products.filter((product) =>
-      [product.name, product.description, product.code, product.category, String(product.id)]
+      [
+        product.name,
+        product.description,
+        product.code,
+        product.category,
+        String(product.id),
+        product.supplierName,
+      ]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -109,10 +125,11 @@ export default function ProductsPage() {
 
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
+              <table className="w-full min-w-[980px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
                     <th className="px-2 py-2 text-center sm:px-3 sm:py-3">#</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الصورة</th>
                     <th className="px-2 py-2 text-right sm:px-3 sm:py-3">الاسم</th>
                     <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الفئة</th>
                     <th className="px-2 py-2 text-center sm:px-3 sm:py-3">المباع</th>
@@ -126,27 +143,37 @@ export default function ProductsPage() {
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                      <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
                         جارٍ تحميل المنتجات...
                       </td>
                     </tr>
                   ) : filteredProducts.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                      <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
                         لا توجد منتجات من الـ API حاليًا.
                       </td>
                     </tr>
                   ) : (
                     filteredProducts.map((product, index) => (
                       <tr
-                        key={product.id}
+                        key={`${product.id}-${product.code}`}
                         className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}
                       >
                         <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
                           {product.id}
                         </td>
+                        <td className="px-2 py-2 text-center sm:px-3 sm:py-3">
+                          <img
+                            src={getProductImageSrc(product.imageUrl)}
+                            alt={product.name}
+                            className="mx-auto h-12 w-12 rounded-md border border-slate-200 bg-slate-50 object-contain p-1"
+                          />
+                        </td>
                         <td className="px-2 py-2 text-right font-semibold text-slate-800 sm:px-3 sm:py-3">
-                          {product.name}
+                          <div>{product.name}</div>
+                          <div className="mt-1 text-xs font-normal text-slate-500">
+                            {product.code}
+                          </div>
                         </td>
                         <td className="px-2 py-2 text-center text-slate-600 sm:px-3 sm:py-3">
                           {product.category}
@@ -187,11 +214,20 @@ export default function ProductsPage() {
             </div>
           </div>
 
-          {selectedProduct && (
-            <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
-              تم اختيار المنتج: <span className="font-semibold">{selectedProduct.name}</span>
+          {selectedProduct ? (
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-3">
+                <img
+                  src={getProductImageSrc(selectedProduct.imageUrl)}
+                  alt={selectedProduct.name}
+                  className="h-14 w-14 rounded-lg border border-slate-200 bg-slate-50 object-contain p-1"
+                />
+                <div className="text-sm text-slate-600">
+                  تم اختيار المنتج: <span className="font-semibold">{selectedProduct.name}</span>
+                </div>
+              </div>
             </div>
-          )}
+          ) : null}
         </main>
 
         <Sidebar activeLabel="المنتجات" />

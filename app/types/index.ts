@@ -111,10 +111,17 @@ export type ClientRecentInvoice = {
 export type Client = {
   id: number;
   name: string;
+  type?: string;
   email: string;
   phone: string;
   country: string;
   address: string;
+  taxNumber?: string;
+  commercialRegister?: string;
+  creditLimit?: number;
+  openingBalance?: number;
+  defaultPaymentMethod?: string;
+  internalNotes?: string;
   currency: string;
   invoices: number;
   due: number;
@@ -142,6 +149,7 @@ export type InvoiceStatus =
 
 export type Invoice = {
   id: string;
+  backendId?: string;
   num: number;
   products: number;
   total: number;
