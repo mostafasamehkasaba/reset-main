@@ -133,7 +133,7 @@ function RegisterPageContent() {
         </p>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-4">
         {errorMessage ? (
           <div className="flex items-start gap-3 rounded-[1.4rem] border border-rose-200 bg-rose-50/90 px-4 py-3 text-sm text-rose-700">
             <CircleAlert className="mt-0.5 h-5 w-5 shrink-0" />
@@ -141,8 +141,8 @@ function RegisterPageContent() {
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="grid gap-5 sm:grid-cols-2">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             <AuthField
               label="الاسم"
               icon={UserRound}
@@ -216,7 +216,7 @@ function RegisterPageContent() {
           />
 
           <div
-            className={`rounded-2xl border px-4 py-3 text-sm ${
+            className={`rounded-[1.25rem] border px-4 py-2.5 text-sm ${
               passwordsMismatch
                 ? "border-rose-200 bg-rose-50 text-rose-700"
                 : passwordsMatch

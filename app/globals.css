@@ -472,6 +472,17 @@ html {
   color: #c2410c;
 }
 
+.auth-field-input:-webkit-autofill,
+.auth-field-input:-webkit-autofill:hover,
+.auth-field-input:-webkit-autofill:focus,
+.auth-field-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #0f172a;
+  caret-color: #b85c2f;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 :root[data-theme="dark"] .product-stock-alert {
   background-color: #31230f;
   border-color: #92400e;

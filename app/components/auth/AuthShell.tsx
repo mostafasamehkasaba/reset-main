@@ -59,6 +59,7 @@ export default function AuthShell({
     <section
       className="relative min-h-screen overflow-hidden bg-[#f6efe6] text-slate-900"
       dir="rtl"
+      style={{ colorScheme: "light" }}
     >
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.05)_1px,transparent_1px)] bg-[size:72px_72px]" />
@@ -96,23 +97,23 @@ export default function AuthShell({
         <div className="flex flex-1 items-center py-8 lg:py-10">
           <div className={layoutClass}>
             <main className={mainClass}>
-              <div className="rounded-[2rem] border border-[#e7dccd] bg-white p-6 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] sm:p-8">
+              <div className="rounded-[1.75rem] border border-[#e7dccd] bg-white p-5 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] sm:p-6">
                 <div className="inline-flex items-center rounded-full bg-[#fff2e7] px-3 py-1 text-xs font-semibold text-[#b85c2f]">
                   {eyebrow}
                 </div>
 
-                <div className="mt-5 text-right">
-                  <h1 className="text-3xl font-bold leading-tight text-slate-900 sm:text-[2.4rem]">
+                <div className="mt-4 text-right">
+                  <h1 className="text-3xl font-bold leading-tight text-slate-900 sm:text-[2.15rem]">
                     {title}
                   </h1>
-                  <p className="mt-3 text-sm leading-7 text-slate-500 sm:text-base">
+                  <p className="mt-2 text-sm leading-6 text-slate-500 sm:text-[0.95rem]">
                     {description}
                   </p>
                 </div>
 
-                <div className="mt-8">{children}</div>
+                <div className="mt-6">{children}</div>
 
-                <div className="mt-8 border-t border-[#eee4d7] pt-5 text-right">{footer}</div>
+                <div className="mt-6 border-t border-[#eee4d7] pt-4 text-right">{footer}</div>
               </div>
             </main>
 

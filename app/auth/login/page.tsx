@@ -111,7 +111,7 @@ function LoginPageContent() {
         </p>
       }
     >
-      <div className="space-y-5">
+      <div className="space-y-4">
         {registrationSuccess ? (
           <div className="flex items-start gap-3 rounded-[1.4rem] border border-emerald-200 bg-emerald-50/90 px-4 py-3 text-sm text-emerald-700">
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
@@ -126,7 +126,7 @@ function LoginPageContent() {
           </div>
         ) : null}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <AuthField
             label="البريد الإلكتروني"
             icon={Mail}
@@ -160,7 +160,7 @@ function LoginPageContent() {
             }
           />
 
-          <div className="rounded-[1.4rem] border border-[#eadfce] bg-[#fbf8f3] px-4 py-3 text-sm text-slate-500">
+          <div className="rounded-[1.25rem] border border-[#eadfce] bg-[#fbf8f3] px-4 py-2.5 text-sm text-slate-500">
             يتم حفظ الجلسة في المتصفح بعد نجاح الدخول لاستخدامها في الطلبات المحمية.
           </div>
 

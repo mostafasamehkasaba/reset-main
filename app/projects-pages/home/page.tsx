@@ -261,12 +261,6 @@ export default function HomePage() {
     [isDark]
   );
 
-  const currentDate = new Date().toLocaleDateString("ar-EG", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-
   return (
     <div className={`${styles.dashboardRoot} flex h-dvh w-full flex-col`}>
       <TopNav currentLabel="لوحة البيانات" />
@@ -276,21 +270,6 @@ export default function HomePage() {
         dir="ltr"
       >
         <main className="min-w-0 flex-1 space-y-4 pb-4 sm:pb-6" dir="rtl">
-          <section className={styles.heroSection}>
-            <div>
-              <p className={styles.heroTag}>مركز التحكم المالي</p>
-              <h1 className={styles.heroTitle}>لوحة بيانات مرتبطة بالـ API بدل البيانات المحلية</h1>
-              <p className={styles.heroSubtitle}>
-                الأرقام الحالية في هذه الصفحة تعتمد على المنتجات والفواتير القادمة من الخادم،
-                وليس على بيانات mock أو localStorage.
-              </p>
-            </div>
-            <div className={styles.heroMeta}>
-              <span>{currentDate}</span>
-              <span>آخر تحديث: الآن</span>
-            </div>
-          </section>
-
           {productsError || invoicesError ? (
             <section className="grid gap-3 md:grid-cols-2">
               {productsError ? (
