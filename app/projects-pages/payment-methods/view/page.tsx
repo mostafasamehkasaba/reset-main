@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import { getErrorMessage } from "../../../lib/fetcher";
 import { listPaymentMethods, type PaymentMethod } from "../../../services/payment-methods";
 
-export default function PaymentMethodViewPage() {
+function PaymentMethodViewPageContent() {
   const searchParams = useSearchParams();
   const methodIdParam = searchParams.get("id");
   const methodId = methodIdParam ? Number(methodIdParam) : Number.NaN;
@@ -106,5 +106,31 @@ export default function PaymentMethodViewPage() {
         <Sidebar activeLabel="وسائل الدفع" />
       </div>
     </div>
+  );
+}
+
+function PaymentMethodViewPageFallback() {
+  return (
+    <div className="min-h-screen w-full bg-slate-100 text-slate-800">
+      <TopNav currentLabel="وسائل الدفع" />
+
+      <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
+        <main className="min-w-0 flex-1 space-y-4" dir="rtl">
+          <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500 shadow-sm">
+            جاري تحميل بيانات وسيلة الدفع...
+          </div>
+        </main>
+
+        <Sidebar activeLabel="وسائل الدفع" />
+      </div>
+    </div>
+  );
+}
+
+export default function PaymentMethodViewPage() {
+  return (
+    <Suspense fallback={<PaymentMethodViewPageFallback />}>
+      <PaymentMethodViewPageContent />
+    </Suspense>
   );
 }
