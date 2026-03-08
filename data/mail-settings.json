@@ -1,0 +1,9 @@
+{
+  "contactEmail": "",
+  "smtpHost": "",
+  "smtpUsername": "",
+  "smtpPassword": "",
+  "smtpPort": 587,
+  "tlsEnabled": true,
+  "updatedAt": null
+}

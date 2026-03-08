@@ -3,6 +3,7 @@ import {
   getCountryLabel,
   getSupplierStatusLabel,
   toCountryApiValue,
+  type SupplierStatusApiValue,
   toSupplierStatusApiValue,
 } from "../lib/api-lookups";
 import { apiRequest } from "../lib/fetcher";
@@ -22,7 +23,7 @@ export type SupplierPayload = {
   bankAccountNumber: string;
   bankName: string;
   iban: string;
-  status: SupplierStatus;
+  status: SupplierStatus | SupplierStatusApiValue;
   notes: string;
 };
 
@@ -121,38 +122,38 @@ const extractCollection = (payload: unknown): unknown[] => {
   return [];
 };
 
-const buildRequestBody = (supplier: SupplierPayload) => ({
+const buildRequestBody = (supplier: SupplierPayload) => {
   const normalizedCountry = toCountryApiValue(supplier.country);
   const normalizedStatus = toSupplierStatusApiValue(supplier.status);
 
   return {
-  name: supplier.name,
-  supplier_name: supplier.name,
-  email: supplier.email,
-  phone: supplier.phone,
-  mobile: supplier.phone,
-  country: normalizedCountry,
-  country_name: getCountryLabel(normalizedCountry),
-  city: supplier.city,
-  address: supplier.address,
-  taxNumber: supplier.taxNumber,
-  tax_number: supplier.taxNumber,
-  paymentTermDays: supplier.paymentTermDays,
-  payment_term_days: supplier.paymentTermDays,
-  creditLimit: supplier.creditLimit,
-  credit_limit: supplier.creditLimit,
-  openingBalance: supplier.openingBalance,
-  opening_balance: supplier.openingBalance,
-  bankAccountNumber: supplier.bankAccountNumber,
-  bank_account_number: supplier.bankAccountNumber,
-  bankName: supplier.bankName,
-  bank_name: supplier.bankName,
-  iban: supplier.iban,
-  status: normalizedStatus,
-  state: normalizedStatus,
-  is_active: normalizedStatus === "active",
-  status_label: getSupplierStatusLabel(normalizedStatus),
-  notes: supplier.notes,
+    name: supplier.name,
+    supplier_name: supplier.name,
+    email: supplier.email,
+    phone: supplier.phone,
+    mobile: supplier.phone,
+    country: normalizedCountry,
+    country_name: getCountryLabel(normalizedCountry),
+    city: supplier.city,
+    address: supplier.address,
+    taxNumber: supplier.taxNumber,
+    tax_number: supplier.taxNumber,
+    paymentTermDays: supplier.paymentTermDays,
+    payment_term_days: supplier.paymentTermDays,
+    creditLimit: supplier.creditLimit,
+    credit_limit: supplier.creditLimit,
+    openingBalance: supplier.openingBalance,
+    opening_balance: supplier.openingBalance,
+    bankAccountNumber: supplier.bankAccountNumber,
+    bank_account_number: supplier.bankAccountNumber,
+    bankName: supplier.bankName,
+    bank_name: supplier.bankName,
+    iban: supplier.iban,
+    status: normalizedStatus,
+    state: normalizedStatus,
+    is_active: normalizedStatus === "active",
+    status_label: getSupplierStatusLabel(normalizedStatus),
+    notes: supplier.notes,
   };
 };
 

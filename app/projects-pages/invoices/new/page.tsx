@@ -10,6 +10,7 @@ import { getErrorMessage } from "../../../lib/fetcher";
 import { listClients } from "../../../services/clients";
 import { createInvoice } from "../../../services/invoices";
 import { listProducts } from "../../../services/products";
+import { emptySettings, getSettings, type AppSettings } from "../../../services/settings";
 import type { Client } from "../../../types";
 
 type InvoiceItemType = "product" | "service";
@@ -152,6 +153,7 @@ const escapeHtml = (value: string) =>
 export default function NewInvoicePage() {
   const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
   const [clientsList, setClientsList] = useState<Client[]>([]);
+  const [companySettings, setCompanySettings] = useState<AppSettings>(emptySettings);
   const [currency, setCurrency] = useState("OMR");
   const [issueDate, setIssueDate] = useState(todayDate());
   const [dueDate, setDueDate] = useState("");
@@ -188,13 +190,16 @@ export default function NewInvoicePage() {
       setLoadError("");
 
       try {
-        const [productsData, clientsData] = await Promise.all([
+        const [productsData, clientsData, settingsData] = await Promise.all([
           listProducts(),
           listClients(),
+          getSettings().catch(() => emptySettings),
         ]);
         if (!active) return;
         setAvailableProducts(productsData);
         setClientsList(clientsData);
+        setCompanySettings(settingsData);
+        setNotes(settingsData.invoiceNotes || "");
 
         const defaultRow = makeProductRow(
           1,
@@ -208,6 +213,7 @@ export default function NewInvoicePage() {
         setLoadError(getErrorMessage(error, "تعذر تحميل البيانات المرتبطة بالفاتورة."));
         setAvailableProducts([]);
         setClientsList([]);
+        setCompanySettings(emptySettings);
         const defaultRow = makeProductRow(1, [], toPositiveNumber(defaultTaxRate, 0));
         setLineItems([defaultRow]);
         setNextLineId(2);
@@ -360,6 +366,9 @@ export default function NewInvoicePage() {
 
   const buildPrintableDocument = (mode: "print" | "pdf") => {
     const dueText = dueDate || "-";
+    const printableLogo = companySettings.logoDataUrl || `${window.location.origin}/globe.svg`;
+    const companyName = companySettings.siteName || "فاتورة+";
+    const companyTagline = companySettings.companyTagline || "تصميم فاتورة رسمي";
     const itemsHtml = lineItems
       .map((item) => {
         const line = calculateLineTotals(item);
@@ -414,10 +423,10 @@ export default function NewInvoicePage() {
   <body>
     <div class="head">
       <div class="logoWrap">
-        <img src="${window.location.origin}/globe.svg" alt="Logo" />
+        <img src="${printableLogo}" alt="Logo" />
         <div>
-          <div style="font-weight:700;">فاتورة+</div>
-          <div class="muted">تصميم فاتورة رسمي</div>
+          <div style="font-weight:700;">${escapeHtml(companyName)}</div>
+          <div class="muted">${escapeHtml(companyTagline)}</div>
         </div>
       </div>
       <div class="badge">${escapeHtml(invoiceNumber)}</div>
@@ -714,15 +723,23 @@ export default function NewInvoicePage() {
             </aside>
 
             <section className="min-w-0 space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className="grid h-12 w-12 place-items-center rounded-lg bg-white shadow-sm">
-                      <img src="/globe.svg" alt="شعار" className="h-7 w-7" />
+                      <img
+                        src={companySettings.logoDataUrl || "/globe.svg"}
+                        alt="شعار"
+                        className="h-7 w-7 object-contain"
+                      />
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-slate-800">فاتورة+</p>
-                      <p className="text-xs text-slate-500">تصميم فاتورة رسمي بالشعار</p>
+                      <p className="text-sm font-bold text-slate-800">
+                        {companySettings.siteName || "فاتورة+"}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {companySettings.companyTagline || "تصميم فاتورة رسمي بالشعار"}
+                      </p>
                     </div>
                   </div>
                   <div className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700">

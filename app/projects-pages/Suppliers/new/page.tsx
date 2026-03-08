@@ -165,7 +165,9 @@ export default function NewSupplierPage() {
                   <select
                     className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                     value={form.country}
-                    onChange={(event) => updateField("country", event.target.value)}
+                    onChange={(event) =>
+                      updateField("country", event.target.value as CountryApiValue)
+                    }
                   >
                     {countryOptions.map((country) => (
                       <option key={country.value} value={country.value}>
