@@ -6,9 +6,7 @@ import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import { countryOptions, type CountryApiValue } from "../../../lib/api-lookups";
 import { getErrorMessage } from "../../../lib/fetcher";
-import { createClient } from "../../../services/clients";
-
-type ClientType = "individual" | "company";
+import { createClient, type ClientType } from "../../../services/clients";
 
 type ClientFormState = {
   name: string;
@@ -62,6 +60,7 @@ export default function NewClientPage() {
     try {
       await createClient({
         name: form.name.trim(),
+        type: form.clientType,
         email: form.email.trim() || "-",
         phone: form.phone.trim() || "-",
         country: form.country,

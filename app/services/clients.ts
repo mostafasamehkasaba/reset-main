@@ -3,6 +3,8 @@ import { getCountryLabel, toCountryApiValue } from "../lib/api-lookups";
 import { ApiError, apiRequest } from "../lib/fetcher";
 import type { Client, ClientRecentInvoice, ClientStats } from "../types";
 
+export type ClientType = "individual" | "company";
+
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -190,6 +192,7 @@ const requireToken = () => {
 
 const buildRequestBody = (client: {
   name: string;
+  type: ClientType;
   email?: string;
   phone?: string;
   country?: string;
@@ -202,6 +205,10 @@ const buildRequestBody = (client: {
     name: client.name,
     client_name: client.name,
     customer_name: client.name,
+    type: client.type,
+    client_type: client.type,
+    customer_type: client.type,
+    is_company: client.type === "company",
     email: client.email,
     client_email: client.email,
     phone: client.phone,
@@ -241,6 +248,7 @@ export const getClient = async (clientId: number) => {
 
 export const createClient = async (client: {
   name: string;
+  type: ClientType;
   email?: string;
   phone?: string;
   country?: string;
