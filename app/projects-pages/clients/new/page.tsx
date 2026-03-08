@@ -4,6 +4,9 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
+import { countryOptions, type CountryApiValue } from "../../../lib/api-lookups";
+import { getErrorMessage } from "../../../lib/fetcher";
+import { createClient } from "../../../services/clients";
 
 type ClientType = "individual" | "company";
 
@@ -12,7 +15,7 @@ type ClientFormState = {
   clientType: ClientType;
   phone: string;
   email: string;
-  country: string;
+  country: CountryApiValue;
   address: string;
   taxNumber: string;
   creditLimit: string;
@@ -21,19 +24,6 @@ type ClientFormState = {
   notes: string;
 };
 
-const countryOptions = [
-  "مصر",
-  "السعودية",
-  "الإمارات",
-  "قطر",
-  "الكويت",
-  "عُمان",
-  "البحرين",
-  "الأردن",
-  "تونس",
-  "الجزائر",
-];
-
 const paymentMethods = ["نقدي", "تحويل بنكي", "بطاقة", "آجل", "شيك"];
 
 const initialFormState: ClientFormState = {
@@ -41,7 +31,7 @@ const initialFormState: ClientFormState = {
   clientType: "individual",
   phone: "",
   email: "",
-  country: "مصر",
+  country: countryOptions[0].value,
   address: "",
   taxNumber: "",
   creditLimit: "0",
@@ -53,6 +43,8 @@ const initialFormState: ClientFormState = {
 export default function NewClientPage() {
   const [form, setForm] = useState<ClientFormState>(initialFormState);
   const [saveMessage, setSaveMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = <K extends keyof ClientFormState>(
     key: K,
@@ -61,14 +53,32 @@ export default function NewClientPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setSaveMessage("تم حفظ بيانات العميل بنجاح.");
-    setForm((prev) => ({
-      ...initialFormState,
-      country: prev.country,
-      paymentMethod: prev.paymentMethod,
-    }));
+    setSaveMessage("");
+    setErrorMessage("");
+    setIsSubmitting(true);
+
+    try {
+      await createClient({
+        name: form.name.trim(),
+        email: form.email.trim() || "-",
+        phone: form.phone.trim() || "-",
+        country: form.country,
+        address: form.address.trim() || "-",
+      });
+
+      setSaveMessage("تم حفظ بيانات العميل بنجاح.");
+      setForm((prev) => ({
+        ...initialFormState,
+        country: prev.country,
+        paymentMethod: prev.paymentMethod,
+      }));
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "تعذر حفظ بيانات العميل."));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -151,8 +161,8 @@ export default function NewClientPage() {
                     onChange={(event) => updateField("country", event.target.value)}
                   >
                     {countryOptions.map((country) => (
-                      <option key={country} value={country}>
-                        {country}
+                      <option key={country.value} value={country.value}>
+                        {country.label}
                       </option>
                     ))}
                   </select>
@@ -249,10 +259,17 @@ export default function NewClientPage() {
               </div>
             ) : null}
 
+            {errorMessage ? (
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                {errorMessage}
+              </div>
+            ) : null}
+
             <div className="flex items-center justify-between">
               <button
                 type="submit"
-                className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white"
+                disabled={isSubmitting}
+                className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-70"
               >
                 حفظ
               </button>

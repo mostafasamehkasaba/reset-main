@@ -125,3 +125,32 @@ export type Client = {
 export type ClientViewPageProps = {
   params: { id: string };
 };
+
+export type AuthUser = {
+  id?: number;
+  name?: string;
+  email?: string;
+  role?: string;
+};
+
+export type InvoiceStatus =
+  | "مدفوعة"
+  | "غير مدفوعة"
+  | "مدفوعة جزئيا"
+  | "مسودة"
+  | "ملغاة";
+
+export type Invoice = {
+  id: string;
+  num: number;
+  products: number;
+  total: number;
+  paid: number;
+  discount: number;
+  due: number;
+  currency: string;
+  status: InvoiceStatus | string;
+  date: string;
+  dueDate: string;
+  client: string;
+};

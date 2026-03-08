@@ -1,10 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { FileText, Package, Tag, Truck, Users } from "lucide-react";
+import { FileText, LogOut, Package, Tag, Truck, Users } from "lucide-react";
 import SidebarToggle from "./SidebarToggle";
 import ThemeToggle from "./ThemeToggle";
+import { getStoredAuthUser } from "../lib/auth-session";
+import { LOGIN_PATH } from "../lib/constant";
+import { getErrorMessage } from "../lib/fetcher";
+import { logout } from "../services/auth";
+import type { AuthUser } from "../types";
 
 type TopNavProps = {
   currentLabel: string;
@@ -19,8 +25,12 @@ export default function TopNav({
   actionLabel = "إجراء جديد",
   searchPlaceholder = "بحث سريع عن العملاء، المنتجات، الفواتير...",
 }: TopNavProps) {
+  const router = useRouter();
   const [now, setNow] = useState(() => new Date());
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
+  const [logoutError, setLogoutError] = useState("");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const actionsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -35,16 +45,47 @@ export default function TopNav({
         setActionsOpen(false);
       }
     };
+
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setActionsOpen(false);
     };
+
     document.addEventListener("mousedown", handlePointer);
     document.addEventListener("keydown", handleKey);
+
     return () => {
       document.removeEventListener("mousedown", handlePointer);
       document.removeEventListener("keydown", handleKey);
     };
   }, []);
+
+  useEffect(() => {
+    const syncAuthUser = () => setAuthUser(getStoredAuthUser());
+
+    syncAuthUser();
+    window.addEventListener("storage", syncAuthUser);
+    window.addEventListener("focus", syncAuthUser);
+
+    return () => {
+      window.removeEventListener("storage", syncAuthUser);
+      window.removeEventListener("focus", syncAuthUser);
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    setLogoutError("");
+    setIsLoggingOut(true);
+
+    try {
+      await logout();
+      router.replace(LOGIN_PATH);
+      router.refresh();
+    } catch (error) {
+      setLogoutError(getErrorMessage(error, "تعذر تسجيل الخروج."));
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
 
   return (
     <header
@@ -59,10 +100,25 @@ export default function TopNav({
           >
             <div className="h-10 w-10 rounded-xl bg-slate-200-70" />
             <div className="text-right leading-tight">
-              <p className="text-sm font-semibold text-slate-800">أحمد محمد</p>
-              <p className="text-xs text-slate-500">مدير النظام</p>
+              <p className="text-sm font-semibold text-slate-800">
+                {authUser?.name || authUser?.email || "المستخدم"}
+              </p>
+              <p className="text-xs text-slate-500">
+                {authUser?.role || authUser?.email || "جلسة API نشطة"}
+              </p>
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+            dir="rtl"
+          >
+            <LogOut className="h-4 w-4" />
+            {isLoggingOut ? "جاري الخروج..." : "خروج"}
+          </button>
 
           <ThemeToggle variant="compact" />
           <SidebarToggle />
@@ -165,6 +221,12 @@ export default function TopNav({
         </div>
 
         <div className="flex items-center gap-3" dir="rtl">
+          {logoutError ? (
+            <div className="hidden rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 xl:block">
+              {logoutError}
+            </div>
+          ) : null}
+
           <div className="app-surface-card rounded-2xl border px-3 py-2 text-xs text-slate-700 shadow-inner">
             <div className="font-semibold">{now.toLocaleTimeString("ar-EG")}</div>
             <div className="text-[11px] text-slate-500">

@@ -6,19 +6,19 @@ import { useRouter } from "next/navigation";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import {
-  defaultSuppliers,
-  loadSuppliersFromStorage,
-  PAYMENT_TERMS,
-  saveSuppliersToStorage,
-  SUPPLIER_STATUSES,
-} from "../../../lib/supplier-store";
-import type { Supplier, SupplierStatus } from "../../../types";
+  countryOptions,
+  supplierStatusOptions,
+  type CountryApiValue,
+  type SupplierStatusApiValue,
+} from "../../../lib/api-lookups";
+import { getErrorMessage } from "../../../lib/fetcher";
+import { createSupplier } from "../../../services/suppliers";
 
 type SupplierFormState = {
   name: string;
   email: string;
   phone: string;
-  country: string;
+  country: CountryApiValue;
   city: string;
   address: string;
   taxNumber: string;
@@ -28,28 +28,17 @@ type SupplierFormState = {
   bankAccountNumber: string;
   bankName: string;
   iban: string;
-  status: SupplierStatus;
+  status: SupplierStatusApiValue;
   notes: string;
 };
 
-const countryOptions = [
-  "مصر",
-  "السعودية",
-  "الإمارات",
-  "قطر",
-  "الكويت",
-  "عُمان",
-  "البحرين",
-  "الأردن",
-  "تونس",
-  "الجزائر",
-];
+const paymentTerms: Array<30 | 60> = [30, 60];
 
 const initialFormState: SupplierFormState = {
   name: "",
   email: "",
   phone: "",
-  country: "مصر",
+  country: countryOptions[0].value,
   city: "",
   address: "",
   taxNumber: "",
@@ -59,7 +48,7 @@ const initialFormState: SupplierFormState = {
   bankAccountNumber: "",
   bankName: "",
   iban: "",
-  status: "نشط",
+  status: supplierStatusOptions[0].value,
   notes: "",
 };
 
@@ -67,6 +56,7 @@ export default function NewSupplierPage() {
   const router = useRouter();
   const [form, setForm] = useState<SupplierFormState>(initialFormState);
   const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const updateField = <K extends keyof SupplierFormState>(
     key: K,
@@ -75,7 +65,7 @@ export default function NewSupplierPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrorMessage("");
 
@@ -84,35 +74,34 @@ export default function NewSupplierPage() {
       return;
     }
 
-    const suppliers = loadSuppliersFromStorage();
-    const source = suppliers.length ? suppliers : defaultSuppliers;
-    const nextId = source.length ? Math.max(...source.map((supplier) => supplier.id)) + 1 : 1;
-    const openingBalance = Math.max(0, Number.parseFloat(form.openingBalance) || 0);
+    setIsSubmitting(true);
 
-    const newSupplier: Supplier = {
-      id: nextId,
-      name: form.name.trim(),
-      email: form.email.trim() || "-",
-      phone: form.phone.trim(),
-      country: form.country.trim() || "-",
-      city: form.city.trim() || "-",
-      address: form.address.trim() || "-",
-      taxNumber: form.taxNumber.trim() || "-",
-      paymentTermDays: form.paymentTermDays,
-      creditLimit: Math.max(0, Number.parseFloat(form.creditLimit) || 0),
-      openingBalance,
-      bankAccountNumber: form.bankAccountNumber.trim() || "-",
-      bankName: form.bankName.trim() || "-",
-      iban: form.iban.trim() || "-",
-      status: form.status,
-      notes: form.notes.trim() || "-",
-      balance: openingBalance,
-      orders: 0,
-      joinedAt: new Date().toISOString().slice(0, 10),
-    };
+    try {
+      await createSupplier({
+        name: form.name.trim(),
+        email: form.email.trim() || "-",
+        phone: form.phone.trim(),
+        country: form.country.trim() || "-",
+        city: form.city.trim() || "-",
+        address: form.address.trim() || "-",
+        taxNumber: form.taxNumber.trim() || "-",
+        paymentTermDays: form.paymentTermDays,
+        creditLimit: Math.max(0, Number.parseFloat(form.creditLimit) || 0),
+        openingBalance: Math.max(0, Number.parseFloat(form.openingBalance) || 0),
+        bankAccountNumber: form.bankAccountNumber.trim() || "-",
+        bankName: form.bankName.trim() || "-",
+        iban: form.iban.trim() || "-",
+        status: form.status,
+        notes: form.notes.trim() || "-",
+      });
 
-    saveSuppliersToStorage([newSupplier, ...source]);
-    router.push("/projects-pages/Suppliers");
+      router.push("/projects-pages/Suppliers");
+      router.refresh();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error, "تعذر حفظ المورد."));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -179,8 +168,8 @@ export default function NewSupplierPage() {
                     onChange={(event) => updateField("country", event.target.value)}
                   >
                     {countryOptions.map((country) => (
-                      <option key={country} value={country}>
-                        {country}
+                      <option key={country.value} value={country.value}>
+                        {country.label}
                       </option>
                     ))}
                   </select>
@@ -224,9 +213,7 @@ export default function NewSupplierPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    مدة السداد
-                  </label>
+                  <label className="text-sm font-semibold text-slate-700">مدة السداد</label>
                   <select
                     className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                     value={form.paymentTermDays}
@@ -237,7 +224,7 @@ export default function NewSupplierPage() {
                       )
                     }
                   >
-                    {PAYMENT_TERMS.map((term) => (
+                    {paymentTerms.map((term) => (
                       <option key={term} value={term}>
                         {term} يوم
                       </option>
@@ -285,9 +272,7 @@ export default function NewSupplierPage() {
                   <input
                     className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                     value={form.bankAccountNumber}
-                    onChange={(event) =>
-                      updateField("bankAccountNumber", event.target.value)
-                    }
+                    onChange={(event) => updateField("bankAccountNumber", event.target.value)}
                   />
                 </div>
 
@@ -320,12 +305,12 @@ export default function NewSupplierPage() {
                     className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                     value={form.status}
                     onChange={(event) =>
-                      updateField("status", event.target.value as SupplierStatus)
+                      updateField("status", event.target.value as SupplierStatusApiValue)
                     }
                   >
-                    {SUPPLIER_STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
+                    {supplierStatusOptions.map((status) => (
+                      <option key={status.value} value={status.value}>
+                        {status.label}
                       </option>
                     ))}
                   </select>
@@ -353,9 +338,10 @@ export default function NewSupplierPage() {
             <div className="flex items-center justify-between">
               <button
                 type="submit"
-                className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white"
+                disabled={isSubmitting}
+                className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-70"
               >
-                حفظ المورد
+                {isSubmitting ? "جارٍ حفظ المورد..." : "حفظ المورد"}
               </button>
               <Link
                 href="/projects-pages/Suppliers"

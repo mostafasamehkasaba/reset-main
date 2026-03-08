@@ -6,6 +6,7 @@ type ConfirmDeleteModalProps = {
   message?: string;
   confirmText?: string;
   cancelText?: string;
+  isProcessing?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 };
@@ -16,6 +17,7 @@ export default function ConfirmDeleteModal({
   message = "هل أنت متأكد أنك تريد الحذف؟ لا يمكن التراجع عن هذا الإجراء.",
   confirmText = "تأكيد الحذف",
   cancelText = "إلغاء",
+  isProcessing = false,
   onConfirm,
   onClose,
 }: ConfirmDeleteModalProps) {
@@ -41,10 +43,11 @@ export default function ConfirmDeleteModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
+            disabled={isProcessing}
+            className="rounded-full p-1 text-slate-500 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-70"
             aria-label="إغلاق"
           >
-            ✕
+            x
           </button>
         </div>
 
@@ -52,20 +55,21 @@ export default function ConfirmDeleteModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            disabled={isProcessing}
+            className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {cancelText}
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100"
+            disabled={isProcessing}
+            className="rounded-md border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            {confirmText}
+            {isProcessing ? "جاري التنفيذ..." : confirmText}
           </button>
         </div>
       </div>
     </div>
   );
 }
-

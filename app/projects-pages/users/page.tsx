@@ -1,44 +1,68 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import Sidebar from "../../components/Sidebar";
 import TopNav from "../../components/TopNav";
+import { getErrorMessage } from "../../lib/fetcher";
+import { createUser, deleteUser, listUsers, updateUser } from "../../services/users";
 import type { AppUser, UserRole, UserStatus } from "../../types";
 
-const initialUsers: AppUser[] = [
-  {
-    id: 1,
-    name: "محمود أحمد",
-    email: "mahmoud@company.com",
-    phone: "+20 100 200 3000",
-    role: "مدير",
-    status: "نشط",
-    joinedAt: "2025-10-15",
-  },
-  {
-    id: 2,
-    name: "ندى محمد",
-    email: "nada@company.com",
-    phone: "+20 111 400 5000",
-    role: "محاسب",
-    status: "نشط",
-    joinedAt: "2025-12-01",
-  },
-  {
-    id: 3,
-    name: "أحمد علي",
-    email: "ahmed@company.com",
-    phone: "+20 122 600 7000",
-    role: "مشاهدة فقط",
-    status: "معلّق",
-    joinedAt: "2026-01-09",
-  },
+const defaultRole = "ظ…ط­ط§ط³ط¨" as UserRole;
+const defaultStatus = "ظ†ط´ط·" as UserStatus;
+
+const roleOptions: Array<{ value: UserRole; label: string }> = [
+  { value: "ظ…ط¯ظٹط±" as UserRole, label: "مدير" },
+  { value: "ظ…ط­ط§ط³ط¨" as UserRole, label: "محاسب" },
+  { value: "ظ…ط´ط§ظ‡ط¯ط© ظپظ‚ط·" as UserRole, label: "مشاهدة فقط" },
 ];
+
+const statusOptions: Array<{ value: UserStatus; label: string }> = [
+  { value: "ظ†ط´ط·" as UserStatus, label: "نشط" },
+  { value: "ظ…ط¹ظ„ظ‘ظ‚" as UserStatus, label: "معلق" },
+];
+
+const roleLabelMap: Record<string, string> = {
+  "ظ…ط¯ظٹط±": "مدير",
+  "مدير": "مدير",
+  "admin": "مدير",
+  "owner": "مدير",
+  "manager": "مدير",
+  "ظ…ط­ط§ط³ط¨": "محاسب",
+  "محاسب": "محاسب",
+  "accountant": "محاسب",
+  "finance": "محاسب",
+  "ظ…ط´ط§ظ‡ط¯ط© ظپظ‚ط·": "مشاهدة فقط",
+  "مشاهدة فقط": "مشاهدة فقط",
+  "viewer": "مشاهدة فقط",
+  "read_only": "مشاهدة فقط",
+};
+
+const statusLabelMap: Record<string, string> = {
+  "ظ†ط´ط·": "نشط",
+  "نشط": "نشط",
+  "active": "نشط",
+  "enabled": "نشط",
+  "ظ…ط¹ظ„ظ‘ظ‚": "معلق",
+  "ظ…ط¹ظ„ظ‚": "معلق",
+  "معلق": "معلق",
+  "inactive": "معلق",
+  "disabled": "معلق",
+  "suspended": "معلق",
+};
+
+const getRoleLabel = (value: string) => roleLabelMap[value] ?? value;
+const getStatusLabel = (value: string) => statusLabelMap[value] ?? value;
+const isActiveStatus = (value: string) => getStatusLabel(value) === "نشط";
 
 export default function UsersPage() {
   const [query, setQuery] = useState("");
-  const [users, setUsers] = useState<AppUser[]>(initialUsers);
+  const [users, setUsers] = useState<AppUser[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [openActionId, setOpenActionId] = useState<number | null>(null);
   const [viewUserId, setViewUserId] = useState<number | null>(null);
@@ -48,33 +72,63 @@ export default function UsersPage() {
     name: "",
     email: "",
     phone: "",
-    role: "محاسب" as UserRole,
-    status: "نشط" as UserStatus,
+    role: defaultRole,
+    status: defaultStatus,
   });
   const [editUser, setEditUser] = useState({
     name: "",
     email: "",
     phone: "",
-    role: "محاسب" as UserRole,
-    status: "نشط" as UserStatus,
+    role: defaultRole,
+    status: defaultStatus,
   });
+
+  useEffect(() => {
+    let active = true;
+
+    const loadData = async () => {
+      setIsLoading(true);
+      setErrorMessage("");
+
+      try {
+        const data = await listUsers();
+        if (!active) return;
+        setUsers(data);
+      } catch (error) {
+        if (!active) return;
+        setErrorMessage(getErrorMessage(error, "تعذر تحميل المستخدمين."));
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return users;
-    return users.filter((user) =>
-      [user.name, user.email, user.phone, user.role, user.status]
+    return users.filter((user) => {
+      const roleLabel = getRoleLabel(user.role);
+      const statusLabel = getStatusLabel(user.status);
+      return [user.name, user.email, user.phone, user.role, roleLabel, user.status, statusLabel]
         .join(" ")
         .toLowerCase()
-        .includes(q)
-    );
+        .includes(q);
+    });
   }, [query, users]);
 
   const activeUsers = useMemo(
-    () => users.filter((user) => user.status === "نشط").length,
+    () => users.filter((user) => isActiveStatus(user.status)).length,
     [users]
   );
-  const admins = useMemo(() => users.filter((user) => user.role === "مدير").length, [users]);
+  const admins = useMemo(
+    () => users.filter((user) => getRoleLabel(user.role) === "مدير").length,
+    [users]
+  );
 
   const selectedActionUser = useMemo(
     () => users.find((user) => user.id === openActionId) ?? null,
@@ -89,31 +143,38 @@ export default function UsersPage() {
     [users, deleteUserId]
   );
 
-  const handleAddUser = (event: FormEvent<HTMLFormElement>) => {
+  const handleAddUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!newUser.name.trim() || !newUser.email.trim() || !newUser.phone.trim()) {
       return;
     }
 
-    const user: AppUser = {
-      id: users.length ? Math.max(...users.map((item) => item.id)) + 1 : 1,
-      name: newUser.name.trim(),
-      email: newUser.email.trim(),
-      phone: newUser.phone.trim(),
-      role: newUser.role,
-      status: newUser.status,
-      joinedAt: new Date().toISOString().slice(0, 10),
-    };
+    setActionError("");
+    setIsSubmitting(true);
 
-    setUsers((prev) => [user, ...prev]);
-    setNewUser({
-      name: "",
-      email: "",
-      phone: "",
-      role: "محاسب",
-      status: "نشط",
-    });
-    setShowAddModal(false);
+    try {
+      const user = await createUser({
+        name: newUser.name.trim(),
+        email: newUser.email.trim(),
+        phone: newUser.phone.trim(),
+        role: newUser.role,
+        status: newUser.status,
+      });
+
+      setUsers((prev) => [user, ...prev]);
+      setNewUser({
+        name: "",
+        email: "",
+        phone: "",
+        role: defaultRole,
+        status: defaultStatus,
+      });
+      setShowAddModal(false);
+    } catch (error) {
+      setActionError(getErrorMessage(error, "تعذر حفظ المستخدم."));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleStartEdit = (user: AppUser) => {
@@ -128,34 +189,49 @@ export default function UsersPage() {
     setOpenActionId(null);
   };
 
-  const handleUpdateUser = (event: FormEvent<HTMLFormElement>) => {
+  const handleUpdateUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editUserId || !editUser.name.trim() || !editUser.email.trim() || !editUser.phone.trim()) {
       return;
     }
 
-    setUsers((prev) =>
-      prev.map((user) =>
-        user.id === editUserId
-          ? {
-              ...user,
-              name: editUser.name.trim(),
-              email: editUser.email.trim(),
-              phone: editUser.phone.trim(),
-              role: editUser.role,
-              status: editUser.status,
-            }
-          : user
-      )
-    );
-    setEditUserId(null);
+    setActionError("");
+    setIsSubmitting(true);
+
+    try {
+      const updated = await updateUser(editUserId, {
+        name: editUser.name.trim(),
+        email: editUser.email.trim(),
+        phone: editUser.phone.trim(),
+        role: editUser.role,
+        status: editUser.status,
+      });
+
+      setUsers((prev) => prev.map((user) => (user.id === editUserId ? updated : user)));
+      setEditUserId(null);
+    } catch (error) {
+      setActionError(getErrorMessage(error, "تعذر تحديث بيانات المستخدم."));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteUser = (userId: number) => {
-    setUsers((prev) => prev.filter((user) => user.id !== userId));
-    setOpenActionId(null);
-    if (viewUserId === userId) setViewUserId(null);
-    if (editUserId === userId) setEditUserId(null);
+  const handleDeleteUser = async (userId: number) => {
+    setActionError("");
+    setIsDeleting(true);
+
+    try {
+      await deleteUser(userId);
+      setUsers((prev) => prev.filter((user) => user.id !== userId));
+      setDeleteUserId(null);
+      setOpenActionId(null);
+      if (viewUserId === userId) setViewUserId(null);
+      if (editUserId === userId) setEditUserId(null);
+    } catch (error) {
+      setActionError(getErrorMessage(error, "تعذر حذف المستخدم."));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -219,6 +295,18 @@ export default function UsersPage() {
             </div>
           </div>
 
+          {errorMessage ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {errorMessage}
+            </div>
+          ) : null}
+
+          {actionError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {actionError}
+            </div>
+          ) : null}
+
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
@@ -237,32 +325,50 @@ export default function UsersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.length === 0 ? (
+                  {isLoading ? (
                     <tr>
                       <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
-                        لا يوجد نتائج مطابقة للبحث.
+                        جارٍ تحميل المستخدمين...
+                      </td>
+                    </tr>
+                  ) : filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-8 text-center text-slate-500">
+                        لا يوجد مستخدمون من الـ API حاليًا.
                       </td>
                     </tr>
                   ) : (
                     filteredUsers.map((user, index) => (
                       <tr key={user.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{user.id}</td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">{user.name}</td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">{user.email}</td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">{user.phone}</td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{user.role}</td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                          {user.id}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">
+                          {user.name}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
+                          {user.email}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
+                          {user.phone}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                          {getRoleLabel(user.role)}
+                        </td>
                         <td className="px-2 py-2 sm:px-3 sm:py-3 text-center">
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                              user.status === "نشط"
+                              isActiveStatus(user.status)
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-amber-50 text-amber-700"
                             }`}
                           >
-                            {user.status}
+                            {getStatusLabel(user.status)}
                           </span>
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">{user.joinedAt}</td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
+                          {user.joinedAt}
+                        </td>
                         <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-500">
                           <button
                             type="button"
@@ -310,7 +416,7 @@ export default function UsersPage() {
                 className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
-                ✕
+                ×
               </button>
             </div>
             <div className="mt-3 space-y-2 text-sm">
@@ -360,7 +466,7 @@ export default function UsersPage() {
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -375,11 +481,11 @@ export default function UsersPage() {
               </div>
               <div className="rounded-lg bg-slate-50 p-3">
                 <p className="text-slate-500">الصلاحية</p>
-                <p className="mt-1 font-semibold">{selectedViewUser.role}</p>
+                <p className="mt-1 font-semibold">{getRoleLabel(selectedViewUser.role)}</p>
               </div>
               <div className="rounded-lg bg-slate-50 p-3">
                 <p className="text-slate-500">الحالة</p>
-                <p className="mt-1 font-semibold">{selectedViewUser.status}</p>
+                <p className="mt-1 font-semibold">{getStatusLabel(selectedViewUser.status)}</p>
               </div>
               <div className="rounded-lg bg-slate-50 p-3 md:col-span-2">
                 <p className="text-slate-500">تاريخ الانضمام</p>
@@ -404,7 +510,7 @@ export default function UsersPage() {
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -453,9 +559,11 @@ export default function UsersPage() {
                       }))
                     }
                   >
-                    <option value="مدير">مدير</option>
-                    <option value="محاسب">محاسب</option>
-                    <option value="مشاهدة فقط">مشاهدة فقط</option>
+                    {roleOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </label>
 
@@ -471,8 +579,11 @@ export default function UsersPage() {
                       }))
                     }
                   >
-                    <option value="نشط">نشط</option>
-                    <option value="معلّق">معلّق</option>
+                    {statusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </label>
               </div>
@@ -511,7 +622,7 @@ export default function UsersPage() {
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -560,9 +671,11 @@ export default function UsersPage() {
                       }))
                     }
                   >
-                    <option value="مدير">مدير</option>
-                    <option value="محاسب">محاسب</option>
-                    <option value="مشاهدة فقط">مشاهدة فقط</option>
+                    {roleOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </label>
 
@@ -578,8 +691,11 @@ export default function UsersPage() {
                       }))
                     }
                   >
-                    <option value="نشط">نشط</option>
-                    <option value="معلّق">معلّق</option>
+                    {statusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
                 </label>
               </div>
@@ -612,11 +728,14 @@ export default function UsersPage() {
             ? `هل تريد حذف المستخدم "${selectedDeleteUser.name}"؟`
             : "هل تريد حذف هذا المستخدم؟"
         }
-        onClose={() => setDeleteUserId(null)}
-        onConfirm={() => {
-          if (deleteUserId === null) return;
-          handleDeleteUser(deleteUserId);
+        isProcessing={isDeleting}
+        onClose={() => {
+          if (isDeleting) return;
           setDeleteUserId(null);
+        }}
+        onConfirm={() => {
+          if (deleteUserId === null || isDeleting) return;
+          void handleDeleteUser(deleteUserId);
         }}
       />
     </div>

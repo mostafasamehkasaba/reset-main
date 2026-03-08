@@ -1,45 +1,81 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
+import { getErrorMessage } from "../../../lib/fetcher";
+import { createSubCategory, listCategories } from "../../../services/categories";
 import type { CategoryStatus, MainCategory, SubCategory } from "../../../types";
 
-const mainCategories: MainCategory[] = [
-  { id: 1, name: "الإلكترونيات", code: "ELEC", status: "نشط", products: 56 },
-  { id: 2, name: "مستلزمات مكتبية", code: "OFFC", status: "نشط", products: 33 },
-  { id: 3, name: "برمجيات", code: "SOFT", status: "معلّق", products: 14 },
-];
+const statusLabelMap: Record<string, string> = {
+  "نشط": "نشط",
+  "معلّق": "معلق",
+  "معلق": "معلق",
+  "active": "نشط",
+  "inactive": "معلق",
+  "disabled": "معلق",
+  "paused": "معلق",
+};
 
-const initialSubCategories: SubCategory[] = [
-  { id: 1, name: "هواتف", mainCategoryId: 1, status: "نشط", products: 19 },
-  { id: 2, name: "لابتوب", mainCategoryId: 1, status: "نشط", products: 12 },
-  { id: 3, name: "طابعات", mainCategoryId: 2, status: "نشط", products: 9 },
-  { id: 4, name: "أوراق", mainCategoryId: 2, status: "معلّق", products: 7 },
-  { id: 5, name: "أنظمة محاسبية", mainCategoryId: 3, status: "نشط", products: 6 },
-];
+const getStatusLabel = (value: string) => statusLabelMap[value] ?? value;
+const isActiveStatus = (value: string) => getStatusLabel(value) === "نشط";
 
 export default function SubCategoriesPage() {
   const [query, setQuery] = useState("");
-  const [subCategories, setSubCategories] = useState<SubCategory[]>(initialSubCategories);
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  const [mainCategories, setMainCategories] = useState<MainCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newSubCategory, setNewSubCategory] = useState({
     name: "",
-    mainCategoryId: mainCategories[0]?.id ?? 0,
+    mainCategoryId: 0,
     status: "نشط" as CategoryStatus,
   });
 
+  useEffect(() => {
+    let active = true;
+
+    const loadData = async () => {
+      setIsLoading(true);
+      setErrorMessage("");
+
+      try {
+        const data = await listCategories();
+        if (!active) return;
+        setMainCategories(data.mainCategories);
+        setSubCategories(data.subCategories);
+        setNewSubCategory((prev) => ({
+          ...prev,
+          mainCategoryId: data.mainCategories[0]?.id ?? 0,
+        }));
+      } catch (error) {
+        if (!active) return;
+        setErrorMessage(getErrorMessage(error, "تعذر تحميل التصنيفات الفرعية."));
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const mainById = useMemo(
     () => Object.fromEntries(mainCategories.map((item) => [item.id, item.name])),
-    []
+    [mainCategories]
   );
 
   const filteredSubCategories = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return subCategories;
     return subCategories.filter((item) =>
-      [item.name, mainById[item.mainCategoryId] ?? "", item.status]
+      [item.name, mainById[item.mainCategoryId] ?? "", item.status, getStatusLabel(item.status)]
         .join(" ")
         .toLowerCase()
         .includes(q)
@@ -47,7 +83,7 @@ export default function SubCategoriesPage() {
   }, [mainById, query, subCategories]);
 
   const activeCount = useMemo(
-    () => subCategories.filter((item) => item.status === "نشط").length,
+    () => subCategories.filter((item) => isActiveStatus(item.status)).length,
     [subCategories]
   );
 
@@ -56,25 +92,32 @@ export default function SubCategoriesPage() {
     [subCategories]
   );
 
-  const handleAddSubCategory = (event: FormEvent<HTMLFormElement>) => {
+  const handleAddSubCategory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!newSubCategory.name.trim() || !newSubCategory.mainCategoryId) return;
 
-    const category: SubCategory = {
-      id: subCategories.length ? Math.max(...subCategories.map((item) => item.id)) + 1 : 1,
-      name: newSubCategory.name.trim(),
-      mainCategoryId: newSubCategory.mainCategoryId,
-      status: newSubCategory.status,
-      products: 0,
-    };
+    setSaveError("");
+    setIsSaving(true);
 
-    setSubCategories((prev) => [category, ...prev]);
-    setNewSubCategory({
-      name: "",
-      mainCategoryId: mainCategories[0]?.id ?? 0,
-      status: "نشط",
-    });
-    setShowAddModal(false);
+    try {
+      const category = await createSubCategory({
+        name: newSubCategory.name.trim(),
+        mainCategoryId: newSubCategory.mainCategoryId,
+        status: newSubCategory.status,
+      });
+
+      setSubCategories((prev) => [category, ...prev]);
+      setNewSubCategory({
+        name: "",
+        mainCategoryId: mainCategories[0]?.id ?? 0,
+        status: "نشط",
+      });
+      setShowAddModal(false);
+    } catch (error) {
+      setSaveError(getErrorMessage(error, "تعذر حفظ التصنيف الفرعي."));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -97,6 +140,18 @@ export default function SubCategoriesPage() {
               <p className="mt-2 text-2xl font-bold text-slate-800">{totalProducts}</p>
             </article>
           </section>
+
+          {errorMessage ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {errorMessage}
+            </div>
+          ) : null}
+
+          {saveError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {saveError}
+            </div>
+          ) : null}
 
           <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div
@@ -140,7 +195,9 @@ export default function SubCategoriesPage() {
                   </svg>
                 </div>
               </div>
-              <h2 className="text-right text-lg font-semibold text-slate-700" dir="rtl">التصنيفات الفرعية</h2>
+              <h2 className="text-right text-lg font-semibold text-slate-700" dir="rtl">
+                التصنيفات الفرعية
+              </h2>
             </div>
 
             <div className="overflow-x-auto">
@@ -155,30 +212,42 @@ export default function SubCategoriesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSubCategories.length === 0 ? (
+                  {isLoading ? (
                     <tr>
                       <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
-                        لا يوجد نتائج مطابقة.
+                        جارٍ تحميل التصنيفات الفرعية...
+                      </td>
+                    </tr>
+                  ) : filteredSubCategories.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
+                        لا توجد تصنيفات فرعية من الـ API حاليًا.
                       </td>
                     </tr>
                   ) : (
                     filteredSubCategories.map((category, index) => (
                       <tr key={category.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{category.id}</td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">{category.name}</td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                          {category.id}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">
+                          {category.name}
+                        </td>
                         <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
                           {mainById[category.mainCategoryId] ?? "-"}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{category.products}</td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                          {category.products}
+                        </td>
                         <td className="px-2 py-2 sm:px-3 sm:py-3 text-center">
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                              category.status === "نشط"
+                              isActiveStatus(category.status)
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-amber-50 text-amber-700"
                             }`}
                           >
-                            {category.status}
+                            {getStatusLabel(category.status)}
                           </span>
                         </td>
                       </tr>
@@ -207,7 +276,7 @@ export default function SubCategoriesPage() {
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -226,7 +295,7 @@ export default function SubCategoriesPage() {
                 </label>
 
                 <label className="text-sm text-slate-600">
-                  التصنيف الأساسي *
+                  التصنيف الأساسي
                   <select
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
                     value={newSubCategory.mainCategoryId}
@@ -236,7 +305,6 @@ export default function SubCategoriesPage() {
                         mainCategoryId: Number(event.target.value),
                       }))
                     }
-                    required
                   >
                     {mainCategories.map((category) => (
                       <option key={category.id} value={category.id}>
@@ -259,7 +327,7 @@ export default function SubCategoriesPage() {
                     }
                   >
                     <option value="نشط">نشط</option>
-                    <option value="معلّق">معلّق</option>
+                    <option value="معلّق">معلق</option>
                   </select>
                 </label>
               </div>
@@ -274,9 +342,10 @@ export default function SubCategoriesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-brand-900 px-4 py-2 text-sm text-white hover:bg-brand-800"
+                  disabled={isSaving}
+                  className="rounded-lg bg-brand-900 px-4 py-2 text-sm text-white hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  حفظ
+                  {isSaving ? "جارٍ الحفظ..." : "حفظ"}
                 </button>
               </div>
             </form>

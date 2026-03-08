@@ -14,11 +14,11 @@ import { Line } from "react-chartjs-2";
 import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopNav from "../../components/TopNav";
-import {
-  defaultProducts,
-  getStockAlerts,
-  loadProductsFromStorage,
-} from "../../lib/product-store";
+import { getErrorMessage } from "../../lib/fetcher";
+import { getStockAlerts, type Product } from "../../lib/product-store";
+import { listInvoices } from "../../services/invoices";
+import { listProducts } from "../../services/products";
+import type { Invoice } from "../../types";
 import styles from "./home-dashboard.module.css";
 
 ChartJS.register(
@@ -31,18 +31,8 @@ ChartJS.register(
   Legend
 );
 
-const days = Array.from({ length: 30 }, (_, i) => String(i + 1).padStart(2, "0"));
-const invoicesSeries = [
-  0, 6, 2, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 5, 0, 0, 0, 6, 2, 8, 3, 6,
-];
-const paymentsSeries = [
-  0, 0, 0, 0, 0, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 3, 0, 0, 5, 0, 7,
-];
-const paidSeries = [
-  0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 2, 0, 2,
-];
-
 const toCurrency = (value: number) => `OMR ${value.toLocaleString()}`;
+
 const getThemeState = () => {
   if (typeof window === "undefined") return false;
   const explicit = document.documentElement.getAttribute("data-theme");
@@ -51,13 +41,44 @@ const getThemeState = () => {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 };
 
-export default function HomePage() {
-  const [products, setProducts] = useState(defaultProducts);
-  const [isDark, setIsDark] = useState(false);
+const parseInvoiceDate = (value: string) => {
+  if (!value || value === "-") return null;
 
-  useEffect(() => {
-    setProducts(loadProductsFromStorage());
-  }, []);
+  const direct = new Date(value);
+  if (!Number.isNaN(direct.getTime())) {
+    return direct;
+  }
+
+  const match = value.match(/^(\d{2})[-/](\d{2})[-/](\d{4})$/);
+  if (!match) return null;
+
+  const [, day, month, year] = match;
+  const parsed = new Date(`${year}-${month}-${day}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatDayKey = (date: Date) => date.toISOString().slice(0, 10);
+
+const getLastThirtyDays = () => {
+  const days: Date[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  for (let index = 29; index >= 0; index -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - index);
+    days.push(date);
+  }
+
+  return days;
+};
+
+export default function HomePage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [isDark, setIsDark] = useState(false);
+  const [productsError, setProductsError] = useState("");
+  const [invoicesError, setInvoicesError] = useState("");
 
   useEffect(() => {
     setIsDark(getThemeState());
@@ -77,12 +98,35 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    const syncProducts = () => setProducts(loadProductsFromStorage());
-    window.addEventListener("storage", syncProducts);
-    window.addEventListener("focus", syncProducts);
+    let active = true;
+
+    const loadData = async () => {
+      try {
+        const data = await listProducts();
+        if (!active) return;
+        setProducts(data);
+        setProductsError("");
+      } catch (error) {
+        if (!active) return;
+        setProducts([]);
+        setProductsError(getErrorMessage(error, "تعذر تحميل المنتجات."));
+      }
+
+      try {
+        const data = await listInvoices();
+        if (!active) return;
+        setInvoices(data);
+        setInvoicesError("");
+      } catch (error) {
+        if (!active) return;
+        setInvoices([]);
+        setInvoicesError(getErrorMessage(error, "تعذر تحميل الفواتير."));
+      }
+    };
+
+    loadData();
     return () => {
-      window.removeEventListener("storage", syncProducts);
-      window.removeEventListener("focus", syncProducts);
+      active = false;
     };
   }, []);
 
@@ -104,20 +148,50 @@ export default function HomePage() {
     return totalTax / taxableProducts.length;
   }, [products]);
 
-  const paymentTotal = 1110;
-  const paymentPaid = 555;
-  const discount = 5;
-  const due = 630;
-  const paymentProgress = Math.min(100, Math.round((paymentPaid / paymentTotal) * 100));
+  const paymentTotal = invoices.reduce((sum, invoice) => sum + invoice.total, 0);
+  const paymentPaid = invoices.reduce((sum, invoice) => sum + invoice.paid, 0);
+  const discount = invoices.reduce((sum, invoice) => sum + invoice.discount, 0);
+  const due = invoices.reduce((sum, invoice) => sum + invoice.due, 0);
+  const paymentProgress =
+    paymentTotal > 0 ? Math.min(100, Math.round((paymentPaid / paymentTotal) * 100)) : 0;
   const topAlerts = stockAlerts.slice(0, 5);
+
+  const chartSeries = useMemo(() => {
+    const days = getLastThirtyDays();
+    const invoiceCounts = new Map<string, number>();
+    const paymentCounts = new Map<string, number>();
+    const paidCounts = new Map<string, number>();
+
+    invoices.forEach((invoice) => {
+      const date = parseInvoiceDate(invoice.date);
+      if (!date) return;
+      date.setHours(0, 0, 0, 0);
+      const key = formatDayKey(date);
+
+      invoiceCounts.set(key, (invoiceCounts.get(key) ?? 0) + 1);
+      if (invoice.paid > 0) {
+        paymentCounts.set(key, (paymentCounts.get(key) ?? 0) + 1);
+      }
+      if (invoice.status === "مدفوعة") {
+        paidCounts.set(key, (paidCounts.get(key) ?? 0) + 1);
+      }
+    });
+
+    return {
+      labels: days.map((date) => date.toLocaleDateString("ar-EG", { day: "2-digit" })),
+      invoicesSeries: days.map((date) => invoiceCounts.get(formatDayKey(date)) ?? 0),
+      paymentsSeries: days.map((date) => paymentCounts.get(formatDayKey(date)) ?? 0),
+      paidSeries: days.map((date) => paidCounts.get(formatDayKey(date)) ?? 0),
+    };
+  }, [invoices]);
 
   const chartData = useMemo(
     () => ({
-      labels: days,
+      labels: chartSeries.labels,
       datasets: [
         {
           label: "الفواتير",
-          data: invoicesSeries,
+          data: chartSeries.invoicesSeries,
           borderColor: isDark ? "#2dd4bf" : "#0f766e",
           backgroundColor: isDark ? "rgba(45,212,191,0.15)" : "rgba(15,118,110,0.14)",
           pointRadius: 2.5,
@@ -127,7 +201,7 @@ export default function HomePage() {
         },
         {
           label: "الدفعات",
-          data: paymentsSeries,
+          data: chartSeries.paymentsSeries,
           borderColor: isDark ? "#fbbf24" : "#d97706",
           backgroundColor: "transparent",
           pointRadius: 2.5,
@@ -136,7 +210,7 @@ export default function HomePage() {
         },
         {
           label: "المدفوع",
-          data: paidSeries,
+          data: chartSeries.paidSeries,
           borderColor: isDark ? "#7dd3fc" : "#0284c7",
           backgroundColor: "transparent",
           pointRadius: 2.5,
@@ -145,7 +219,7 @@ export default function HomePage() {
         },
       ],
     }),
-    [isDark]
+    [chartSeries, isDark]
   );
 
   const chartOptions = useMemo(
@@ -205,9 +279,10 @@ export default function HomePage() {
           <section className={styles.heroSection}>
             <div>
               <p className={styles.heroTag}>مركز التحكم المالي</p>
-              <h1 className={styles.heroTitle}>لوحة بيانات احترافية لإدارة الفواتير والمخزون</h1>
+              <h1 className={styles.heroTitle}>لوحة بيانات مرتبطة بالـ API بدل البيانات المحلية</h1>
               <p className={styles.heroSubtitle}>
-                رؤية لحظية للمبيعات، التوريد، الضرائب، وتنبيهات المخزون في واجهة واحدة.
+                الأرقام الحالية في هذه الصفحة تعتمد على المنتجات والفواتير القادمة من الخادم،
+                وليس على بيانات mock أو localStorage.
               </p>
             </div>
             <div className={styles.heroMeta}>
@@ -215,6 +290,21 @@ export default function HomePage() {
               <span>آخر تحديث: الآن</span>
             </div>
           </section>
+
+          {productsError || invoicesError ? (
+            <section className="grid gap-3 md:grid-cols-2">
+              {productsError ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {productsError}
+                </div>
+              ) : null}
+              {invoicesError ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {invoicesError}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             <article className={styles.metricCard}>
@@ -226,7 +316,9 @@ export default function HomePage() {
             <article className={styles.metricCard}>
               <p className={styles.metricLabel}>إجمالي المنتجات</p>
               <p className={styles.metricValue}>{products.length}</p>
-              <p className={styles.metricHint}>منتجات بها ضريبة: {products.filter((p) => p.taxMode !== "none").length}</p>
+              <p className={styles.metricHint}>
+                منتجات بها ضريبة: {products.filter((product) => product.taxMode !== "none").length}
+              </p>
             </article>
 
             <article className={styles.metricCard}>
@@ -249,7 +341,7 @@ export default function HomePage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h2 className={styles.panelTitle}>التحليل الشهري</h2>
-                  <p className={styles.panelHint}>أداء الفواتير والدفعات خلال 30 يوم</p>
+                  <p className={styles.panelHint}>أداء الفواتير والدفعات خلال آخر 30 يوم</p>
                 </div>
                 <div className={styles.legendRow}>
                   <span className={styles.legendItem}>
@@ -348,9 +440,7 @@ export default function HomePage() {
                         <p className={styles.metaLine}>
                           الكمية: {alert.product.quantity} {alert.product.unit}
                         </p>
-                        <p className={styles.metaLine}>
-                          حد إعادة الطلب: {alert.product.reorderPoint}
-                        </p>
+                        <p className={styles.metaLine}>حد إعادة الطلب: {alert.product.reorderPoint}</p>
                         <p className={styles.metaLine}>
                           سعر الشراء: {alert.product.purchasePrice} {alert.product.currency}
                         </p>
@@ -392,9 +482,7 @@ export default function HomePage() {
             </article>
           </section>
 
-          <div className={styles.footerNote}>
-            جميع الحقوق محفوظة فاتورة+ © 2026
-          </div>
+          <div className={styles.footerNote}>جميع الحقوق محفوظة فاتورة+ © 2026</div>
         </main>
 
         <Sidebar activeLabel="لوحة البيانات" />

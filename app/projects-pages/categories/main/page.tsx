@@ -1,28 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
+import { getErrorMessage } from "../../../lib/fetcher";
+import { createMainCategory, listCategories } from "../../../services/categories";
 import type { CategoryStatus, MainCategory, SubCategory } from "../../../types";
 
-const initialMainCategories: MainCategory[] = [
-  { id: 1, name: "الإلكترونيات", code: "ELEC", status: "نشط", products: 56 },
-  { id: 2, name: "مستلزمات مكتبية", code: "OFFC", status: "نشط", products: 33 },
-  { id: 3, name: "برمجيات", code: "SOFT", status: "معلّق", products: 14 },
-];
+const statusLabelMap: Record<string, string> = {
+  "نشط": "نشط",
+  "معلّق": "معلق",
+  "معلق": "معلق",
+  "active": "نشط",
+  "inactive": "معلق",
+  "disabled": "معلق",
+  "paused": "معلق",
+};
 
-const seedSubCategories: SubCategory[] = [
-  { id: 1, name: "هواتف", mainCategoryId: 1, status: "نشط", products: 19 },
-  { id: 2, name: "لابتوب", mainCategoryId: 1, status: "نشط", products: 12 },
-  { id: 3, name: "طابعات", mainCategoryId: 2, status: "نشط", products: 9 },
-  { id: 4, name: "أوراق", mainCategoryId: 2, status: "معلّق", products: 7 },
-  { id: 5, name: "أنظمة محاسبية", mainCategoryId: 3, status: "نشط", products: 6 },
-];
+const getStatusLabel = (value: string) => statusLabelMap[value] ?? value;
+const isActiveStatus = (value: string) => getStatusLabel(value) === "نشط";
 
 export default function MainCategoriesPage() {
   const [query, setQuery] = useState("");
-  const [categories, setCategories] = useState<MainCategory[]>(initialMainCategories);
+  const [categories, setCategories] = useState<MainCategory[]>([]);
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCategory, setNewCategory] = useState({
     name: "",
@@ -30,11 +36,40 @@ export default function MainCategoriesPage() {
     status: "نشط" as CategoryStatus,
   });
 
+  useEffect(() => {
+    let active = true;
+
+    const loadData = async () => {
+      setIsLoading(true);
+      setErrorMessage("");
+
+      try {
+        const data = await listCategories();
+        if (!active) return;
+        setCategories(data.mainCategories);
+        setSubCategories(data.subCategories);
+      } catch (error) {
+        if (!active) return;
+        setErrorMessage(getErrorMessage(error, "تعذر تحميل التصنيفات الأساسية."));
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const filteredCategories = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return categories;
     return categories.filter((item) =>
-      [item.name, item.code, item.status].join(" ").toLowerCase().includes(q)
+      [item.name, item.code, item.status, getStatusLabel(item.status)]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     );
   }, [categories, query]);
 
@@ -44,38 +79,45 @@ export default function MainCategoriesPage() {
   );
 
   const activeCount = useMemo(
-    () => categories.filter((category) => category.status === "نشط").length,
+    () => categories.filter((category) => isActiveStatus(category.status)).length,
     [categories]
   );
 
   const subCountByMain = useMemo(
     () =>
-      seedSubCategories.reduce<Record<number, number>>((acc, category) => {
+      subCategories.reduce<Record<number, number>>((acc, category) => {
         acc[category.mainCategoryId] = (acc[category.mainCategoryId] ?? 0) + 1;
         return acc;
       }, {}),
-    []
+    [subCategories]
   );
 
-  const handleAddCategory = (event: FormEvent<HTMLFormElement>) => {
+  const handleAddCategory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!newCategory.name.trim()) return;
+
+    setSaveError("");
+    setIsSaving(true);
 
     const nextCode = newCategory.code.trim()
       ? newCategory.code.trim().toUpperCase()
       : `CAT${String(categories.length + 1).padStart(2, "0")}`;
 
-    const category: MainCategory = {
-      id: categories.length ? Math.max(...categories.map((item) => item.id)) + 1 : 1,
-      name: newCategory.name.trim(),
-      code: nextCode,
-      status: newCategory.status,
-      products: 0,
-    };
+    try {
+      const category = await createMainCategory({
+        name: newCategory.name.trim(),
+        code: nextCode,
+        status: newCategory.status,
+      });
 
-    setCategories((prev) => [category, ...prev]);
-    setNewCategory({ name: "", code: "", status: "نشط" });
-    setShowAddModal(false);
+      setCategories((prev) => [category, ...prev]);
+      setNewCategory({ name: "", code: "", status: "نشط" });
+      setShowAddModal(false);
+    } catch (error) {
+      setSaveError(getErrorMessage(error, "تعذر حفظ التصنيف."));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -98,6 +140,18 @@ export default function MainCategoriesPage() {
               <p className="mt-2 text-2xl font-bold text-slate-800">{totalProducts}</p>
             </article>
           </section>
+
+          {errorMessage ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {errorMessage}
+            </div>
+          ) : null}
+
+          {saveError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {saveError}
+            </div>
+          ) : null}
 
           <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div
@@ -141,7 +195,9 @@ export default function MainCategoriesPage() {
                   </svg>
                 </div>
               </div>
-              <h2 className="text-right text-lg font-semibold text-slate-700" dir="rtl">التصنيفات الأساسية</h2>
+              <h2 className="text-right text-lg font-semibold text-slate-700" dir="rtl">
+                التصنيفات الأساسية
+              </h2>
             </div>
 
             <div className="overflow-x-auto">
@@ -157,31 +213,45 @@ export default function MainCategoriesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCategories.length === 0 ? (
+                  {isLoading ? (
                     <tr>
                       <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
-                        لا يوجد نتائج مطابقة.
+                        جارٍ تحميل التصنيفات...
+                      </td>
+                    </tr>
+                  ) : filteredCategories.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
+                        لا توجد تصنيفات من الـ API حاليًا.
                       </td>
                     </tr>
                   ) : (
                     filteredCategories.map((category, index) => (
                       <tr key={category.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{category.id}</td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">{category.name}</td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">{category.code}</td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                          {category.id}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">
+                          {category.name}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
+                          {category.code}
+                        </td>
                         <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
                           {subCountByMain[category.id] ?? 0}
                         </td>
-                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{category.products}</td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                          {category.products}
+                        </td>
                         <td className="px-2 py-2 sm:px-3 sm:py-3 text-center">
                           <span
                             className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                              category.status === "نشط"
+                              isActiveStatus(category.status)
                                 ? "bg-emerald-50 text-emerald-700"
                                 : "bg-amber-50 text-amber-700"
                             }`}
                           >
-                            {category.status}
+                            {getStatusLabel(category.status)}
                           </span>
                         </td>
                       </tr>
@@ -210,7 +280,7 @@ export default function MainCategoriesPage() {
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
-                ✕
+                ×
               </button>
             </div>
 
@@ -252,7 +322,7 @@ export default function MainCategoriesPage() {
                     }
                   >
                     <option value="نشط">نشط</option>
-                    <option value="معلّق">معلّق</option>
+                    <option value="معلّق">معلق</option>
                   </select>
                 </label>
               </div>
@@ -267,9 +337,10 @@ export default function MainCategoriesPage() {
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-brand-900 px-4 py-2 text-sm text-white hover:bg-brand-800"
+                  disabled={isSaving}
+                  className="rounded-lg bg-brand-900 px-4 py-2 text-sm text-white hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  حفظ
+                  {isSaving ? "جارٍ الحفظ..." : "حفظ"}
                 </button>
               </div>
             </form>

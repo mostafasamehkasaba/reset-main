@@ -1,28 +1,65 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import Sidebar from "../../components/Sidebar";
-import { clients } from "./data";
 import TopNav from "../../components/TopNav";
+import { getErrorMessage } from "../../lib/fetcher";
+import { deleteClient, listClients } from "../../services/clients";
+import type { Client } from "../../types";
 
 export default function ClientsPage() {
   const [query, setQuery] = useState("");
-  const [clientsList, setClientsList] = useState(clients);
+  const [clientsList, setClientsList] = useState<Client[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
   const [deleteClientId, setDeleteClientId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadData = async () => {
+      setIsLoading(true);
+      setErrorMessage("");
+
+      try {
+        const data = await listClients();
+        if (!active) return;
+        setClientsList(data);
+      } catch (error) {
+        if (!active) return;
+        setErrorMessage(getErrorMessage(error, "تعذر تحميل العملاء."));
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const filteredClients = useMemo(() => {
-    const q = query.trim();
+    const q = query.trim().toLowerCase();
     if (!q) return clientsList;
     return clientsList.filter(
       (client) =>
-        client.name.includes(q) ||
-        client.email.includes(q) ||
-        client.phone.includes(q) ||
-        client.country.includes(q) ||
-        String(client.due).includes(q) ||
-        client.currency.includes(q)
+        [
+          client.name,
+          client.email,
+          client.phone,
+          client.country,
+          String(client.due),
+          client.currency,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q)
     );
   }, [query, clientsList]);
   const selectedClient = useMemo(
@@ -33,6 +70,21 @@ export default function ClientsPage() {
     () => clientsList.find((client) => client.id === deleteClientId) ?? null,
     [deleteClientId, clientsList]
   );
+
+  const handleDeleteClient = async (clientId: number) => {
+    setDeleteError("");
+    setIsDeleting(true);
+
+    try {
+      await deleteClient(clientId);
+      setClientsList((prev) => prev.filter((client) => client.id !== clientId));
+      setDeleteClientId(null);
+    } catch (error) {
+      setDeleteError(getErrorMessage(error, "تعذر حذف العميل."));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
@@ -79,6 +131,18 @@ export default function ClientsPage() {
             </div>
           </div>
 
+          {errorMessage ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {errorMessage}
+            </div>
+          ) : null}
+
+          {deleteError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {deleteError}
+            </div>
+          ) : null}
+
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
@@ -97,40 +161,69 @@ export default function ClientsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredClients.map((client, index) => (
-                    <tr key={client.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{client.id}</td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">
-                        <Link
-                          href={`/projects-pages/clients/${client.id}`}
-                          className="hover:text-brand-800"
-                        >
-                          {client.name}
-                        </Link>
-                      </td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">{client.email}</td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">{client.phone}</td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">{client.country}</td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">{client.invoices}</td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center font-semibold text-emerald-700">
-                        {client.currency} {client.due}
-                      </td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-500">
-                        <button
-                          className="rounded-full p-1 hover:bg-slate-200"
-                          aria-label="خيارات"
-                          type="button"
-                          onClick={() => setOpenId(client.id)}
-                        >
-                          <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-                            <circle cx="12" cy="5" r="1.6" />
-                            <circle cx="12" cy="12" r="1.6" />
-                            <circle cx="12" cy="19" r="1.6" />
-                          </svg>
-                        </button>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
+                        جارٍ تحميل العملاء...
                       </td>
                     </tr>
-                  ))}
+                  ) : filteredClients.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
+                        لا توجد عملاء من الـ API حاليًا.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredClients.map((client, index) => (
+                      <tr key={client.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                          {client.id}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">
+                          <Link
+                            href={`/projects-pages/clients/${client.id}`}
+                            className="hover:text-brand-800"
+                          >
+                            {client.name}
+                          </Link>
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
+                          {client.email}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
+                          {client.phone}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
+                          {client.country}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
+                          {client.invoices}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center font-semibold text-emerald-700">
+                          {client.currency} {client.due}
+                        </td>
+                        <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-500">
+                          <button
+                            className="rounded-full p-1 hover:bg-slate-200"
+                            aria-label="خيارات"
+                            type="button"
+                            onClick={() => setOpenId(client.id)}
+                          >
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 24 24"
+                              className="h-4 w-4"
+                              fill="currentColor"
+                            >
+                              <circle cx="12" cy="5" r="1.6" />
+                              <circle cx="12" cy="12" r="1.6" />
+                              <circle cx="12" cy="19" r="1.6" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -200,11 +293,14 @@ export default function ClientsPage() {
             ? `هل تريد حذف العميل "${selectedDeleteClient.name}"؟`
             : "هل تريد حذف هذا العميل؟"
         }
-        onClose={() => setDeleteClientId(null)}
-        onConfirm={() => {
-          if (deleteClientId === null) return;
-          setClientsList((prev) => prev.filter((client) => client.id !== deleteClientId));
+        isProcessing={isDeleting}
+        onClose={() => {
+          if (isDeleting) return;
           setDeleteClientId(null);
+        }}
+        onConfirm={() => {
+          if (deleteClientId === null || isDeleting) return;
+          void handleDeleteClient(deleteClientId);
         }}
       />
     </div>

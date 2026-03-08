@@ -6,14 +6,14 @@ import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import {
   createProductCode,
-  loadProductsFromStorage,
   PRODUCT_TAX_MODES,
   PRODUCT_UNITS,
-  saveProductsToStorage,
   type Product,
   type ProductTaxMode,
   type ProductUnit,
 } from "../../../lib/product-store";
+import { getErrorMessage } from "../../../lib/fetcher";
+import { createProduct } from "../../../services/products";
 
 type ProductFormState = {
   name: string;
@@ -53,25 +53,19 @@ const createInitialState = (): ProductFormState => ({
   reorderPoint: "5",
   taxMode: "rate",
   defaultTaxRate: "15",
-  supplierName: "شركة الريادة للتوريد",
+  supplierName: "",
   currency: "OMR",
   dateAdded: todayDate(),
   status: "متاح",
   description: "",
 });
 
-const supplierOptions = [
-  "شركة الريادة للتوريد",
-  "مؤسسة المستقبل",
-  "Delta Traders",
-  "مورد آخر",
-];
-
 export default function NewProductPage() {
   const [form, setForm] = useState<ProductFormState>(createInitialState);
   const [isCodeManuallyEdited, setIsCodeManuallyEdited] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const imagePreview = form.imageUrl.trim() || "/file.svg";
 
@@ -90,7 +84,7 @@ export default function NewProductPage() {
     }));
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setValidationMessage("");
     setSaveMessage("");
@@ -105,51 +99,50 @@ export default function NewProductPage() {
       return;
     }
 
-    const quantity = Math.max(0, Number.parseInt(form.quantity, 10) || 0);
-    const minStockLevel = Math.max(0, Number.parseInt(form.minStockLevel, 10) || 0);
-    const reorderInput = Math.max(0, Number.parseInt(form.reorderPoint, 10) || 0);
-    const reorderPoint = Math.max(minStockLevel, reorderInput);
-    const taxRate =
-      form.taxMode === "none"
-        ? 0
-        : Math.max(0, Number.parseFloat(form.defaultTaxRate) || 0);
+    setIsSubmitting(true);
 
-    const products = loadProductsFromStorage();
-    const nextId = products.length
-      ? Math.max(...products.map((product) => product.id)) + 1
-      : 1;
+    try {
+      const quantity = Math.max(0, Number.parseInt(form.quantity, 10) || 0);
+      const minStockLevel = Math.max(0, Number.parseInt(form.minStockLevel, 10) || 0);
+      const reorderInput = Math.max(0, Number.parseInt(form.reorderPoint, 10) || 0);
+      const reorderPoint = Math.max(minStockLevel, reorderInput);
+      const taxRate =
+        form.taxMode === "none"
+          ? 0
+          : Math.max(0, Number.parseFloat(form.defaultTaxRate) || 0);
 
-    const newProduct: Product = {
-      id: nextId,
-      code: form.code.trim(),
-      name: form.name.trim(),
-      category: form.category.trim() || "-",
-      sellingPrice: Math.max(0, Number.parseFloat(form.sellingPrice) || 0),
-      purchasePrice: Math.max(0, Number.parseFloat(form.purchasePrice) || 0),
-      defaultTaxRate: taxRate,
-      quantity,
-      minStockLevel,
-      reorderPoint,
-      sold: 0,
-      description: form.description.trim() || "-",
-      imageUrl: form.imageUrl.trim() || "/file.svg",
-      dateAdded: form.dateAdded,
-      status: form.status,
-      currency: form.currency,
-      unit: form.unit,
-      supplierName: form.supplierName.trim() || "-",
-      barcode: form.barcode.trim() || createBarcode(),
-      taxMode: form.taxMode,
-    };
+      const savedProduct = await createProduct({
+        code: form.code.trim(),
+        name: form.name.trim(),
+        category: form.category.trim() || "-",
+        sellingPrice: Math.max(0, Number.parseFloat(form.sellingPrice) || 0),
+        purchasePrice: Math.max(0, Number.parseFloat(form.purchasePrice) || 0),
+        defaultTaxRate: taxRate,
+        quantity,
+        minStockLevel,
+        reorderPoint,
+        description: form.description.trim() || "-",
+        imageUrl: form.imageUrl.trim() || "/file.svg",
+        dateAdded: form.dateAdded,
+        status: form.status,
+        currency: form.currency,
+        unit: form.unit,
+        supplierName: form.supplierName.trim() || "-",
+        barcode: form.barcode.trim() || createBarcode(),
+        taxMode: form.taxMode,
+      });
 
-    saveProductsToStorage([newProduct, ...products]);
-    setSaveMessage(`تم حفظ المنتج بنجاح: ${newProduct.name} (${newProduct.code})`);
-    setForm((prev) => ({
-      ...createInitialState(),
-      supplierName: prev.supplierName,
-      currency: prev.currency,
-    }));
-    setIsCodeManuallyEdited(false);
+      setSaveMessage(`تم حفظ المنتج بنجاح: ${savedProduct.name} (${savedProduct.code})`);
+      setForm((prev) => ({
+        ...createInitialState(),
+        currency: prev.currency,
+      }));
+      setIsCodeManuallyEdited(false);
+    } catch (error) {
+      setValidationMessage(getErrorMessage(error, "تعذر حفظ المنتج."));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -365,15 +358,13 @@ export default function NewProductPage() {
                       min="0"
                       step="1"
                       value={form.minStockLevel}
-                      onChange={(event) =>
-                        updateField("minStockLevel", event.target.value)
-                      }
+                      onChange={(event) => updateField("minStockLevel", event.target.value)}
                       className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-slate-700">
-                      حد إعادة الطلب (مثال: 5 قطع)
+                      حد إعادة الطلب
                     </label>
                     <input
                       type="number"
@@ -408,18 +399,14 @@ export default function NewProductPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">
-                      نسبة الضريبة %
-                    </label>
+                    <label className="text-sm font-semibold text-slate-700">نسبة الضريبة %</label>
                     <input
                       type="number"
                       min="0"
                       step="0.01"
                       value={form.defaultTaxRate}
                       disabled={form.taxMode === "none"}
-                      onChange={(event) =>
-                        updateField("defaultTaxRate", event.target.value)
-                      }
+                      onChange={(event) => updateField("defaultTaxRate", event.target.value)}
                       className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
                     />
                   </div>
@@ -427,18 +414,13 @@ export default function NewProductPage() {
               </div>
 
               <div className="mt-5 space-y-2">
-                <label className="text-sm font-semibold text-slate-700">اختيار المورد</label>
-                <select
+                <label className="text-sm font-semibold text-slate-700">اسم المورد</label>
+                <input
                   value={form.supplierName}
                   onChange={(event) => updateField("supplierName", event.target.value)}
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  {supplierOptions.map((supplier) => (
-                    <option key={supplier} value={supplier}>
-                      {supplier}
-                    </option>
-                  ))}
-                </select>
+                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  placeholder="اكتب اسم المورد"
+                />
               </div>
 
               <div className="mt-4 space-y-2">
@@ -467,9 +449,10 @@ export default function NewProductPage() {
               <div className="mt-6 flex items-center justify-between">
                 <button
                   type="submit"
-                  className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white"
+                  disabled={isSubmitting}
+                  className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  حفظ المنتج
+                  {isSubmitting ? "جارٍ حفظ المنتج..." : "حفظ المنتج"}
                 </button>
                 <Link
                   href="/projects-pages/products"

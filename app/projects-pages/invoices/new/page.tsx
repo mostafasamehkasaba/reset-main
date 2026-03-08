@@ -5,8 +5,12 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import ConfirmDeleteModal from "../../../components/ConfirmDeleteModal";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
-import { loadProductsFromStorage, type Product } from "../../../lib/product-store";
-import { clients } from "../../clients/data";
+import { type Product } from "../../../lib/product-store";
+import { getErrorMessage } from "../../../lib/fetcher";
+import { listClients } from "../../../services/clients";
+import { createInvoice } from "../../../services/invoices";
+import { listProducts } from "../../../services/products";
+import type { Client } from "../../../types";
 
 type InvoiceItemType = "product" | "service";
 type DiscountType = "percent" | "amount";
@@ -147,6 +151,7 @@ const escapeHtml = (value: string) =>
 
 export default function NewInvoicePage() {
   const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
+  const [clientsList, setClientsList] = useState<Client[]>([]);
   const [currency, setCurrency] = useState("OMR");
   const [issueDate, setIssueDate] = useState(todayDate());
   const [dueDate, setDueDate] = useState("");
@@ -171,44 +176,77 @@ export default function NewInvoicePage() {
   const [designFile, setDesignFile] = useState<File | null>(null);
   const [purchaseOrderFile, setPurchaseOrderFile] = useState<File | null>(null);
   const [saveMessage, setSaveMessage] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    const loadedProducts = loadProductsFromStorage();
-    setAvailableProducts(loadedProducts);
+    let active = true;
 
-    const defaultRow = makeProductRow(1, loadedProducts, toPositiveNumber(defaultTaxRate, 0));
-    setLineItems([defaultRow]);
-    setNextLineId(2);
+    const loadData = async () => {
+      setLoadError("");
 
-    const storedSequence = Number.parseInt(
-      window.localStorage.getItem(INVOICE_SEQUENCE_KEY) ?? "0",
-      10
-    );
-    const safeSequence = Number.isFinite(storedSequence) ? Math.max(0, storedSequence) : 0;
-    const newSequence = safeSequence + 1;
-    setInvoiceSequence(newSequence);
-    setInvoiceNumber(formatInvoiceNumber(newSequence));
+      try {
+        const [productsData, clientsData] = await Promise.all([
+          listProducts(),
+          listClients(),
+        ]);
+        if (!active) return;
+        setAvailableProducts(productsData);
+        setClientsList(clientsData);
+
+        const defaultRow = makeProductRow(
+          1,
+          productsData,
+          toPositiveNumber(defaultTaxRate, 0)
+        );
+        setLineItems([defaultRow]);
+        setNextLineId(2);
+      } catch (error) {
+        if (!active) return;
+        setLoadError(getErrorMessage(error, "تعذر تحميل البيانات المرتبطة بالفاتورة."));
+        setAvailableProducts([]);
+        setClientsList([]);
+        const defaultRow = makeProductRow(1, [], toPositiveNumber(defaultTaxRate, 0));
+        setLineItems([defaultRow]);
+        setNextLineId(2);
+      }
+
+      const storedSequence = Number.parseInt(
+        window.localStorage.getItem(INVOICE_SEQUENCE_KEY) ?? "0",
+        10
+      );
+      const safeSequence = Number.isFinite(storedSequence) ? Math.max(0, storedSequence) : 0;
+      const newSequence = safeSequence + 1;
+      setInvoiceSequence(newSequence);
+      setInvoiceNumber(formatInvoiceNumber(newSequence));
+    };
+
+    loadData();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const selectedClient = useMemo(
-    () => clients.find((client) => client.id === selectedClientId) ?? null,
-    [selectedClientId]
+    () => clientsList.find((client) => client.id === selectedClientId) ?? null,
+    [selectedClientId, clientsList]
   );
 
   const filteredClients = useMemo(() => {
     const query = clientSearch.trim();
     if (!query) {
-      return clients;
+      return clientsList;
     }
-    return clients.filter((client) => {
+    return clientsList.filter((client) => {
       return (
         client.name.includes(query) ||
         client.email.includes(query) ||
         client.phone.includes(query)
       );
     });
-  }, [clientSearch]);
+  }, [clientSearch, clientsList]);
 
   const summary = useMemo(() => {
     return lineItems.reduce(
@@ -231,14 +269,13 @@ export default function NewInvoicePage() {
   );
 
   const isOverdue =
-    paymentMethod === "credit" &&
     dueDate !== "" &&
     dueDate < todayDate() &&
     paymentStatus !== "مدفوعة" &&
     paymentStatus !== "ملغاة";
 
   const selectClient = (clientId: number) => {
-    const client = clients.find((entry) => entry.id === clientId);
+    const client = clientsList.find((entry) => entry.id === clientId);
     if (!client) {
       return;
     }
@@ -322,7 +359,7 @@ export default function NewInvoicePage() {
   };
 
   const buildPrintableDocument = (mode: "print" | "pdf") => {
-    const dueText = paymentMethod === "credit" ? dueDate || "-" : "-";
+    const dueText = dueDate || "-";
     const itemsHtml = lineItems
       .map((item) => {
         const line = calculateLineTotals(item);
@@ -464,10 +501,11 @@ export default function NewInvoicePage() {
     }, 250);
   };
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setValidationMessage("");
     setSaveMessage("");
+    setSaveError("");
 
     if (!selectedClient) {
       setValidationMessage("يجب اختيار العميل من القائمة.");
@@ -486,8 +524,48 @@ export default function NewInvoicePage() {
       return;
     }
 
-    setSaveMessage(`تم حفظ الفاتورة ${invoiceNumber} بنجاح.`);
-    resetForNextInvoice();
+    setIsSubmitting(true);
+
+    try {
+      const savedInvoice = await createInvoice({
+        invoiceNumber,
+        issueDate,
+        dueDate: dueDate || undefined,
+        status: paymentStatus,
+        currency,
+        paymentMethod,
+        clientId: selectedClient.id,
+        clientName: selectedClient.name,
+        clientEmail: clientEmail.trim(),
+        clientPhone: clientPhone.trim(),
+        clientAddress: clientAddress.trim(),
+        notes: notes.trim(),
+        totals: {
+          subtotal: summary.subtotal,
+          discount: summary.discount,
+          tax: summary.tax,
+          total: summary.grandTotal,
+        },
+        items: lineItems.map((item) => ({
+          itemType: item.itemType,
+          productId: item.itemType === "product" ? item.productId : null,
+          name: item.name.trim(),
+          price: item.price,
+          quantity: item.quantity,
+          discountType: item.discountType,
+          discountValue: item.discountValue,
+          taxRate: item.taxRate,
+        })),
+      });
+
+      const savedNumber = savedInvoice?.id || invoiceNumber;
+      setSaveMessage(`تم حفظ الفاتورة ${savedNumber} بنجاح.`);
+      resetForNextInvoice();
+    } catch (error) {
+      setSaveError(getErrorMessage(error, "تعذر حفظ الفاتورة."));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -524,6 +602,12 @@ export default function NewInvoicePage() {
               </Link>
             </div>
           </div>
+
+          {loadError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {loadError}
+            </div>
+          ) : null}
 
           <form
             onSubmit={onSubmit}
@@ -571,9 +655,6 @@ export default function NewInvoicePage() {
                   onChange={(event) => {
                     const value = event.target.value as PaymentMethod;
                     setPaymentMethod(value);
-                    if (value !== "credit") {
-                      setDueDate("");
-                    }
                   }}
                   className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
                 >
@@ -591,13 +672,8 @@ export default function NewInvoicePage() {
                   type="date"
                   value={dueDate}
                   onChange={(event) => setDueDate(event.target.value)}
-                  disabled={paymentMethod !== "credit"}
                   className={`w-full rounded-md border px-3 py-2 text-sm ${
-                    paymentMethod !== "credit"
-                      ? "cursor-not-allowed border-slate-200 bg-slate-100"
-                      : isOverdue
-                        ? "border-rose-300 bg-rose-50 text-rose-700"
-                        : "border-slate-200"
+                    isOverdue ? "border-rose-300 bg-rose-50 text-rose-700" : "border-slate-200"
                   }`}
                 />
                 {isOverdue ? (
@@ -1012,6 +1088,12 @@ export default function NewInvoicePage() {
                 </div>
               ) : null}
 
+              {saveError ? (
+                <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+                  {saveError}
+                </div>
+              ) : null}
+
               {saveMessage ? (
                 <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
                   {saveMessage}
@@ -1021,9 +1103,10 @@ export default function NewInvoicePage() {
               <div className="flex items-center justify-between">
                 <button
                   type="submit"
-                  className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white"
+                  className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-70"
+                  disabled={isSubmitting}
                 >
-                  حفظ الفاتورة
+                  {isSubmitting ? "جارٍ الحفظ..." : "حفظ الفاتورة"}
                 </button>
                 <Link
                   href="/projects-pages/invoices"

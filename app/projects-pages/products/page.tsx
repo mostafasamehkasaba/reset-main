@@ -1,40 +1,59 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "../../components/Sidebar";
 import TopNav from "../../components/TopNav";
-
-const products = [
-  { id: 1, name: "إضافة ووردبريس", sold: 0, desc: "لا يوجد", date: "24-08-2024" },
-  { id: 2, name: "إعداد سيرفر", sold: 5, desc: "لا يوجد", date: "31-08-2024" },
-  { id: 3, name: "برمجة أدوات", sold: 1, desc: "لا يوجد", date: "24-08-2024" },
-  { id: 4, name: "تثبيت برمجيات", sold: 13, desc: "لا يوجد", date: "24-08-2024" },
-  { id: 5, name: "تسجيل استضافة", sold: 2, desc: "لا يوجد", date: "31-08-2024" },
-  { id: 6, name: "تسجيل دومين", sold: 1, desc: "لا يوجد", date: "31-08-2024" },
-  { id: 7, name: "تصميم موقع", sold: 6, desc: "لا يوجد", date: "06-09-2024" },
-  { id: 8, name: "تطوير تطبيق", sold: 3, desc: "لا يوجد", date: "24-08-2024" },
-  { id: 9, name: "قالب ووردبريس", sold: 1, desc: "لا يوجد", date: "24-08-2024" },
-  { id: 10, name: "متجر إلكتروني", sold: 1, desc: "لا يوجد", date: "29-08-2024" },
-  { id: 11, name: "ووردبريس", sold: 14, desc: "لا يوجد", date: "24-08-2024" },
-];
+import { getErrorMessage } from "../../lib/fetcher";
+import { listProducts } from "../../services/products";
+import type { Product } from "../../lib/product-store";
 
 export default function ProductsPage() {
   const [query, setQuery] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    const loadData = async () => {
+      setIsLoading(true);
+      setErrorMessage("");
+
+      try {
+        const data = await listProducts();
+        if (!active) return;
+        setProducts(data);
+      } catch (error) {
+        if (!active) return;
+        setErrorMessage(getErrorMessage(error, "تعذر تحميل المنتجات."));
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const filteredProducts = useMemo(() => {
-    const q = query.trim();
+    const q = query.trim().toLowerCase();
     if (!q) return products;
-    return products.filter(
-      (product) =>
-        product.name.includes(q) ||
-        product.desc.includes(q) ||
-        String(product.id).includes(q)
+    return products.filter((product) =>
+      [product.name, product.description, product.code, product.category, String(product.id)]
+        .join(" ")
+        .toLowerCase()
+        .includes(q)
     );
-  }, [query]);
+  }, [query, products]);
+
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === openId) ?? null,
-    [openId]
+    [openId, products]
   );
 
   return (
@@ -82,63 +101,87 @@ export default function ProductsPage() {
             </div>
           </div>
 
+          {errorMessage ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {errorMessage}
+            </div>
+          ) : null}
+
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
+              <table className="w-full min-w-[820px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">#</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-right">الاسم</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الكمية المباعة</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الوصف</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">التاريخ</th>
-                    <th className="px-2 py-2 sm:px-3 sm:py-3 text-center" aria-label="الإجراءات">
-                      …
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">#</th>
+                    <th className="px-2 py-2 text-right sm:px-3 sm:py-3">الاسم</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الفئة</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">المباع</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الوصف</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">التاريخ</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3" aria-label="الإجراءات">
+                      ...
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredProducts.map((product, index) => (
-                    <tr
-                      key={product.id}
-                      className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}
-                    >
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
-                        {product.id}
-                      </td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-right font-semibold text-slate-800">
-                        {product.name}
-                      </td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-700">
-                        {product.sold}
-                      </td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-500">
-                        {product.desc}
-                      </td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-600">
-                        {product.date}
-                      </td>
-                      <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-500">
-                        <button
-                          className="rounded-full p-1 hover:bg-slate-200"
-                          aria-label="خيارات"
-                          type="button"
-                          onClick={() => setOpenId(product.id)}
-                        >
-                          <svg
-                            aria-hidden="true"
-                            viewBox="0 0 24 24"
-                            className="h-4 w-4"
-                            fill="currentColor"
-                          >
-                            <circle cx="12" cy="5" r="1.6" />
-                            <circle cx="12" cy="12" r="1.6" />
-                            <circle cx="12" cy="19" r="1.6" />
-                          </svg>
-                        </button>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                        جارٍ تحميل المنتجات...
                       </td>
                     </tr>
-                  ))}
+                  ) : filteredProducts.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-3 py-10 text-center text-slate-500">
+                        لا توجد منتجات من الـ API حاليًا.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredProducts.map((product, index) => (
+                      <tr
+                        key={product.id}
+                        className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}
+                      >
+                        <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
+                          {product.id}
+                        </td>
+                        <td className="px-2 py-2 text-right font-semibold text-slate-800 sm:px-3 sm:py-3">
+                          {product.name}
+                        </td>
+                        <td className="px-2 py-2 text-center text-slate-600 sm:px-3 sm:py-3">
+                          {product.category}
+                        </td>
+                        <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
+                          {product.sold}
+                        </td>
+                        <td className="px-2 py-2 text-center text-slate-500 sm:px-3 sm:py-3">
+                          {product.description}
+                        </td>
+                        <td className="px-2 py-2 text-center text-slate-600 sm:px-3 sm:py-3">
+                          {product.dateAdded}
+                        </td>
+                        <td className="px-2 py-2 text-center text-slate-500 sm:px-3 sm:py-3">
+                          <button
+                            className="rounded-full p-1 hover:bg-slate-200"
+                            aria-label="خيارات"
+                            type="button"
+                            onClick={() => setOpenId(product.id)}
+                          >
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 24 24"
+                              className="h-4 w-4"
+                              fill="currentColor"
+                            >
+                              <circle cx="12" cy="5" r="1.6" />
+                              <circle cx="12" cy="12" r="1.6" />
+                              <circle cx="12" cy="19" r="1.6" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

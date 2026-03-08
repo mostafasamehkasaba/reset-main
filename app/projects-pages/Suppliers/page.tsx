@@ -5,29 +5,41 @@ import { useEffect, useMemo, useState } from "react";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import Sidebar from "../../components/Sidebar";
 import TopNav from "../../components/TopNav";
-import {
-  defaultSuppliers,
-  loadSuppliersFromStorage,
-  saveSuppliersToStorage,
-} from "../../lib/supplier-store";
+import { getErrorMessage } from "../../lib/fetcher";
+import { deleteSupplier, listSuppliers } from "../../services/suppliers";
 import type { Supplier } from "../../types";
 
 export default function SuppliersPage() {
   const [query, setQuery] = useState("");
-  const [suppliers, setSuppliers] = useState<Supplier[]>(defaultSuppliers);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [deleteSupplierId, setDeleteSupplierId] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    setSuppliers(loadSuppliersFromStorage());
-  }, []);
+    let active = true;
 
-  useEffect(() => {
-    const syncSuppliers = () => setSuppliers(loadSuppliersFromStorage());
-    window.addEventListener("storage", syncSuppliers);
-    window.addEventListener("focus", syncSuppliers);
+    const loadData = async () => {
+      setIsLoading(true);
+      setErrorMessage("");
+
+      try {
+        const data = await listSuppliers();
+        if (!active) return;
+        setSuppliers(data);
+      } catch (error) {
+        if (!active) return;
+        setErrorMessage(getErrorMessage(error, "تعذر تحميل الموردين."));
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    };
+
+    loadData();
     return () => {
-      window.removeEventListener("storage", syncSuppliers);
-      window.removeEventListener("focus", syncSuppliers);
+      active = false;
     };
   }, []);
 
@@ -69,16 +81,25 @@ export default function SuppliersPage() {
     [suppliers]
   );
 
-  const handleDeleteSupplier = (supplierId: number) => {
-    const nextSuppliers = suppliers.filter((supplier) => supplier.id !== supplierId);
-    setSuppliers(nextSuppliers);
-    saveSuppliersToStorage(nextSuppliers);
-  };
-
   const selectedDeleteSupplier = useMemo(
     () => suppliers.find((supplier) => supplier.id === deleteSupplierId) ?? null,
     [deleteSupplierId, suppliers]
   );
+
+  const handleDeleteSupplier = async (supplierId: number) => {
+    setDeleteError("");
+    setIsDeleting(true);
+
+    try {
+      await deleteSupplier(supplierId);
+      setSuppliers((prev) => prev.filter((supplier) => supplier.id !== supplierId));
+      setDeleteSupplierId(null);
+    } catch (error) {
+      setDeleteError(getErrorMessage(error, "تعذر حذف المورد."));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
@@ -114,24 +135,12 @@ export default function SuppliersPage() {
               >
                 مورد جديد
               </Link>
-              <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm text-slate-600 shadow-sm">
-                <span>إظهار</span>
-                <select
-                  className="bg-transparent text-sm text-slate-700 outline-none"
-                  defaultValue="10"
-                  aria-label="عدد الصفوف"
-                >
-                  <option value="10">10</option>
-                  <option value="20">20</option>
-                  <option value="50">50</option>
-                </select>
-              </div>
             </div>
             <div className="flex justify-center">
               <div className="app-search">
                 <input
                   className="app-search-input h-9 w-64 px-2 text-right text-sm outline-none"
-                  placeholder="اكتب ما تريد أن تبحث عنه"
+                  placeholder="ابحث عن مورد"
                   dir="rtl"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
@@ -153,6 +162,18 @@ export default function SuppliersPage() {
               الموردين
             </div>
           </div>
+
+          {errorMessage ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {errorMessage}
+            </div>
+          ) : null}
+
+          {deleteError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {deleteError}
+            </div>
+          ) : null}
 
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
@@ -178,14 +199,20 @@ export default function SuppliersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredSuppliers.length === 0 ? (
+                  {isLoading ? (
                     <tr>
                       <td colSpan={16} className="px-3 py-10 text-center text-slate-500">
-                        لا يوجد نتائج مطابقة للبحث.
+                        جارٍ تحميل الموردين...
+                      </td>
+                    </tr>
+                  ) : filteredSuppliers.length === 0 ? (
+                    <tr>
+                      <td colSpan={16} className="px-3 py-10 text-center text-slate-500">
+                        لا يوجد موردون مطابقون أو لا توجد بيانات من الـ API.
                       </td>
                     </tr>
                   ) : (
-                    filteredSuppliers.map((supplier, index) => (
+                    filteredSuppliers.map((supplier) => (
                       <tr key={supplier.id} className="border-b border-slate-100">
                         <td className="px-3 py-3 text-center text-slate-700 sm:px-4 sm:py-4">
                           {supplier.id}
@@ -235,8 +262,8 @@ export default function SuppliersPage() {
                               supplier.status === "نشط"
                                 ? "bg-emerald-50 text-emerald-700"
                                 : supplier.status === "موقوف"
-                                ? "bg-amber-50 text-amber-700"
-                                : "bg-slate-200 text-slate-700"
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-slate-200 text-slate-700"
                             }`}
                           >
                             {supplier.status}
@@ -274,11 +301,13 @@ export default function SuppliersPage() {
             ? `هل تريد حذف المورد "${selectedDeleteSupplier.name}"؟`
             : "هل تريد حذف هذا المورد؟"
         }
-        onClose={() => setDeleteSupplierId(null)}
-        onConfirm={() => {
-          if (deleteSupplierId === null) return;
-          handleDeleteSupplier(deleteSupplierId);
+        onClose={() => {
+          if (isDeleting) return;
           setDeleteSupplierId(null);
+        }}
+        onConfirm={() => {
+          if (deleteSupplierId === null || isDeleting) return;
+          void handleDeleteSupplier(deleteSupplierId);
         }}
       />
     </div>
