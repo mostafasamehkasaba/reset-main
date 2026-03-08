@@ -183,6 +183,7 @@ const buildRequestBody = (product: ProductPayload) => ({
   description: product.description,
   imageUrl: product.imageUrl,
   image_url: product.imageUrl,
+  image: product.imageUrl,
   dateAdded: product.dateAdded,
   date_added: product.dateAdded,
   status: product.status,

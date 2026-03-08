@@ -13,7 +13,7 @@ const isProtectedPath = (pathname: string) => {
   return pathname === DEFAULT_AUTH_REDIRECT || pathname.startsWith("/projects-pages");
 };
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
 

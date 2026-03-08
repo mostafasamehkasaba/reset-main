@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { ChangeEvent, FormEvent, useRef, useState } from "react";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import {
@@ -38,6 +38,22 @@ type ProductFormState = {
 
 const todayDate = () => new Date().toISOString().slice(0, 10);
 const createBarcode = () => Date.now().toString().slice(-12).padStart(12, "0");
+const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("تعذر قراءة ملف صورة المنتج."));
+    };
+    reader.onerror = () => reject(new Error("تعذر قراءة ملف صورة المنتج."));
+    reader.readAsDataURL(file);
+  });
 
 const createInitialState = (): ProductFormState => ({
   name: "",
@@ -61,11 +77,13 @@ const createInitialState = (): ProductFormState => ({
 });
 
 export default function NewProductPage() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState<ProductFormState>(createInitialState);
   const [isCodeManuallyEdited, setIsCodeManuallyEdited] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedImageName, setSelectedImageName] = useState("");
 
   const imagePreview = form.imageUrl.trim() || "/file.svg";
 
@@ -82,6 +100,45 @@ export default function NewProductPage() {
       name: value,
       code: isCodeManuallyEdited ? prev.code : createProductCode(value),
     }));
+  };
+
+  const handleImageButtonClick = () => {
+    if (isSubmitting) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) return;
+
+    setSaveMessage("");
+
+    if (!file.type.startsWith("image/")) {
+      setValidationMessage("يرجى اختيار ملف صورة صالح للمنتج.");
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      setValidationMessage("حجم صورة المنتج يجب ألا يتجاوز 2 ميجابايت.");
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setValidationMessage("");
+      setSelectedImageName(file.name);
+      setForm((prev) => ({ ...prev, imageUrl: dataUrl }));
+    } catch (error) {
+      setValidationMessage(getErrorMessage(error, "تعذر قراءة صورة المنتج."));
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setSelectedImageName("");
+    setValidationMessage("");
+    setForm((prev) => ({ ...prev, imageUrl: "" }));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -138,6 +195,7 @@ export default function NewProductPage() {
         currency: prev.currency,
       }));
       setIsCodeManuallyEdited(false);
+      setSelectedImageName("");
     } catch (error) {
       setValidationMessage(getErrorMessage(error, "تعذر حفظ المنتج."));
     } finally {
@@ -213,6 +271,36 @@ export default function NewProductPage() {
                   className="h-28 w-full rounded-md border border-slate-200 bg-slate-50 object-contain p-3"
                 />
                 <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageChange}
+                  disabled={isSubmitting}
+                />
+                <button
+                  type="button"
+                  onClick={handleImageButtonClick}
+                  disabled={isSubmitting}
+                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                >
+                  {selectedImageName ? "تغيير صورة المنتج" : "رفع صورة المنتج"}
+                </button>
+                <div className="text-xs text-slate-500">
+                  {selectedImageName || "JPG, PNG, WEBP حتى 2MB"}
+                </div>
+                {form.imageUrl ? (
+                  <button
+                    type="button"
+                    onClick={handleRemoveImage}
+                    disabled={isSubmitting}
+                    className="w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    إزالة الصورة
+                  </button>
+                ) : null}
+                <input
+                  type="hidden"
                   value={form.imageUrl}
                   onChange={(event) => updateField("imageUrl", event.target.value)}
                   className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
