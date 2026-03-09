@@ -7,11 +7,16 @@ import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import { type Product } from "../../../lib/product-store";
 import { getErrorMessage } from "../../../lib/fetcher";
+import { loadStoredValue, saveStoredValue } from "../../../lib/local-fallback";
 import { listClients } from "../../../services/clients";
-import { createInvoice, type InvoicePaymentStatus } from "../../../services/invoices";
+import {
+  createInvoice,
+  listInvoices,
+  type InvoicePaymentStatus,
+} from "../../../services/invoices";
 import { listProducts } from "../../../services/products";
 import { emptySettings, getSettings, type AppSettings } from "../../../services/settings";
-import type { Client } from "../../../types";
+import type { Client, Invoice } from "../../../types";
 
 type InvoiceItemType = "product" | "service";
 type DiscountType = "percent" | "amount";
@@ -37,7 +42,27 @@ type LineTotals = {
   total: number;
 };
 
+type StoredInvoiceDraft = {
+  invoiceNumber: string;
+  issueDate: string;
+  dueDate: string;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  partialPaidAmount: string;
+  defaultTaxRate: string;
+  notes: string;
+  currency: string;
+  selectedClientId: number | null;
+  clientSearch: string;
+  clientEmail: string;
+  clientPhone: string;
+  clientAddress: string;
+  lineItems: InvoiceItem[];
+  nextLineId: number;
+};
+
 const INVOICE_SEQUENCE_KEY = "reset-main-invoice-sequence-v1";
+const INVOICE_DRAFTS_STORAGE_KEY = "reset-main-invoice-drafts-v1";
 const todayDate = () => new Date().toISOString().slice(0, 10);
 
 const formatInvoiceNumber = (sequence: number) =>
@@ -49,6 +74,196 @@ const toPositiveNumber = (value: string, fallback = 0) => {
     return fallback;
   }
   return Math.max(0, parsed);
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const asText = (value: unknown, fallback = "") =>
+  typeof value === "string" ? value : fallback;
+
+const asFiniteNumber = (value: unknown, fallback = 0) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return fallback;
+};
+
+const toDateInputValue = (value: string, fallback = "") => {
+  const text = value.trim();
+  if (!text || text === "-") {
+    return fallback;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  const prefixedDate = text.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (prefixedDate?.[1]) {
+    return prefixedDate[1];
+  }
+
+  const parsedDate = new Date(text);
+  if (!Number.isNaN(parsedDate.getTime())) {
+    return parsedDate.toISOString().slice(0, 10);
+  }
+
+  return fallback;
+};
+
+const isPaymentMethodValue = (value: unknown): value is PaymentMethod =>
+  value === "cash" || value === "transfer" || value === "card" || value === "credit";
+
+const normalizePaymentStatus = (value: string): PaymentStatus => {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "paid" || normalized === "مدفوعة") {
+    return "مدفوعة";
+  }
+
+  if (normalized === "unpaid" || normalized === "غير مدفوعة" || normalized === "pending") {
+    return "غير مدفوعة";
+  }
+
+  if (
+    normalized === "partial" ||
+    normalized === "partially_paid" ||
+    normalized === "مدفوعة جزئيا" ||
+    normalized === "مدفوعة جزئيًا"
+  ) {
+    return "مدفوعة جزئيا";
+  }
+
+  if (normalized === "cancelled" || normalized === "canceled" || normalized === "ملغاة") {
+    return "ملغاة";
+  }
+
+  return "مسودة";
+};
+
+const normalizeStoredLineItems = (value: unknown): InvoiceItem[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((entry, index) => {
+      if (!isRecord(entry)) {
+        return null;
+      }
+
+      const itemType: InvoiceItemType = entry.itemType === "product" ? "product" : "service";
+      const discountType: DiscountType = entry.discountType === "amount" ? "amount" : "percent";
+
+      const productIdValue = asFiniteNumber(entry.productId, Number.NaN);
+      const productId = Number.isFinite(productIdValue) ? Math.trunc(productIdValue) : null;
+
+      return {
+        id: Math.max(1, Math.trunc(asFiniteNumber(entry.id, index + 1))),
+        itemType,
+        productId,
+        name: asText(entry.name, ""),
+        price: Math.max(0, asFiniteNumber(entry.price, 0)),
+        quantity: Math.max(1, Math.trunc(asFiniteNumber(entry.quantity, 1))),
+        discountType,
+        discountValue: Math.max(0, asFiniteNumber(entry.discountValue, 0)),
+        taxRate: Math.max(0, asFiniteNumber(entry.taxRate, 0)),
+      };
+    })
+    .filter((entry): entry is InvoiceItem => entry !== null);
+};
+
+const getNextLineId = (items: InvoiceItem[]) =>
+  items.reduce((maxId, item) => Math.max(maxId, item.id), 0) + 1;
+
+const buildSummaryFallbackItems = (invoice: Invoice): InvoiceItem[] => {
+  const safeTotal = Math.max(0, invoice.total);
+  const safeDiscount = Math.max(0, invoice.discount);
+
+  return [
+    {
+      id: 1,
+      itemType: "service",
+      productId: null,
+      name: `فاتورة ${invoice.id}`,
+      price: safeTotal + safeDiscount,
+      quantity: 1,
+      discountType: safeDiscount > 0 ? "amount" : "percent",
+      discountValue: safeDiscount > 0 ? safeDiscount : 0,
+      taxRate: 0,
+    },
+  ];
+};
+
+const loadInvoiceDrafts = () =>
+  loadStoredValue<Record<string, unknown>>(INVOICE_DRAFTS_STORAGE_KEY, {}, (value) => {
+    if (!isRecord(value)) {
+      return {};
+    }
+
+    return value;
+  });
+
+const getStoredInvoiceDraft = (invoiceId: string): StoredInvoiceDraft | null => {
+  if (!invoiceId) {
+    return null;
+  }
+
+  const drafts = loadInvoiceDrafts();
+  const rawDraft = drafts[invoiceId];
+  if (!isRecord(rawDraft)) {
+    return null;
+  }
+
+  const paymentMethod = isPaymentMethodValue(rawDraft.paymentMethod)
+    ? rawDraft.paymentMethod
+    : "cash";
+  const paymentStatus = normalizePaymentStatus(asText(rawDraft.paymentStatus, "مسودة"));
+  const lineItems = normalizeStoredLineItems(rawDraft.lineItems);
+
+  return {
+    invoiceNumber: asText(rawDraft.invoiceNumber, invoiceId),
+    issueDate: toDateInputValue(asText(rawDraft.issueDate, todayDate()), todayDate()),
+    dueDate: toDateInputValue(asText(rawDraft.dueDate, ""), ""),
+    paymentMethod,
+    paymentStatus,
+    partialPaidAmount: asText(rawDraft.partialPaidAmount, "0"),
+    defaultTaxRate: asText(rawDraft.defaultTaxRate, "15"),
+    notes: asText(rawDraft.notes, ""),
+    currency: asText(rawDraft.currency, "OMR"),
+    selectedClientId:
+      typeof rawDraft.selectedClientId === "number" && Number.isFinite(rawDraft.selectedClientId)
+        ? Math.trunc(rawDraft.selectedClientId)
+        : null,
+    clientSearch: asText(rawDraft.clientSearch, ""),
+    clientEmail: asText(rawDraft.clientEmail, ""),
+    clientPhone: asText(rawDraft.clientPhone, ""),
+    clientAddress: asText(rawDraft.clientAddress, ""),
+    lineItems,
+    nextLineId: Math.max(
+      2,
+      Math.trunc(asFiniteNumber(rawDraft.nextLineId, getNextLineId(lineItems)))
+    ),
+  };
+};
+
+const saveInvoiceDraft = (invoiceId: string, draft: StoredInvoiceDraft) => {
+  if (!invoiceId.trim()) {
+    return;
+  }
+
+  const drafts = loadInvoiceDrafts();
+  drafts[invoiceId] = draft;
+  saveStoredValue(INVOICE_DRAFTS_STORAGE_KEY, drafts);
 };
 
 const calculateLineTotals = (item: InvoiceItem): LineTotals => {
@@ -159,6 +374,10 @@ const escapeHtml = (value: string) =>
     .replaceAll("'", "&#39;");
 
 export default function NewInvoicePage() {
+  const [invoiceIdParam, setInvoiceIdParam] = useState("");
+  const [isRouteReady, setIsRouteReady] = useState(false);
+  const isEditMode = invoiceIdParam.length > 0;
+
   const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
   const [clientsList, setClientsList] = useState<Client[]>([]);
   const [companySettings, setCompanySettings] = useState<AppSettings>(emptySettings);
@@ -190,13 +409,31 @@ export default function NewInvoicePage() {
   const [saveError, setSaveError] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [editNotice, setEditNotice] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    const nextInvoiceId = new URLSearchParams(window.location.search).get("id")?.trim() || "";
+    setInvoiceIdParam(nextInvoiceId);
+    setIsRouteReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isRouteReady) {
+      return;
+    }
+
     let active = true;
 
     const loadData = async () => {
       setLoadError("");
+      setEditNotice("");
+      setSaveMessage("");
+      setSaveError("");
+      setValidationMessage("");
+      setContractFile(null);
+      setDesignFile(null);
+      setPurchaseOrderFile(null);
 
       try {
         const [productsData, clientsData, settingsData] = await Promise.all([
@@ -205,43 +442,168 @@ export default function NewInvoicePage() {
           getSettings().catch(() => emptySettings),
         ]);
         if (!active) return;
+
+        const parsedDefaultTaxRate = toPositiveNumber(defaultTaxRate, 0);
+        const defaultRow =
+          productsData.length > 0
+            ? makeProductRow(1, productsData, parsedDefaultTaxRate)
+            : makeServiceRow(1, parsedDefaultTaxRate);
+
         setAvailableProducts(productsData);
         setClientsList(clientsData);
         setCompanySettings(settingsData);
         setNotes(settingsData.invoiceNotes || "");
 
-        const defaultRow =
-          productsData.length > 0
-            ? makeProductRow(1, productsData, toPositiveNumber(defaultTaxRate, 0))
-            : makeServiceRow(1, toPositiveNumber(defaultTaxRate, 0));
+        if (isEditMode) {
+          const draft = getStoredInvoiceDraft(invoiceIdParam);
+          if (draft) {
+            const draftItems = draft.lineItems.length > 0 ? draft.lineItems : [defaultRow];
+            setInvoiceNumber(draft.invoiceNumber || invoiceIdParam);
+            setIssueDate(toDateInputValue(draft.issueDate, todayDate()));
+            setDueDate(toDateInputValue(draft.dueDate, ""));
+            setPaymentMethod(draft.paymentMethod);
+            setPaymentStatus(draft.paymentStatus);
+            setPartialPaidAmount(draft.partialPaidAmount);
+            setDefaultTaxRate(draft.defaultTaxRate);
+            setNotes(draft.notes);
+            setCurrency(draft.currency || "OMR");
+            setSelectedClientId(draft.selectedClientId);
+            setClientSearch(draft.clientSearch);
+            setClientEmail(draft.clientEmail);
+            setClientPhone(draft.clientPhone);
+            setClientAddress(draft.clientAddress);
+            setLineItems(draftItems);
+            setNextLineId(Math.max(draft.nextLineId, getNextLineId(draftItems)));
+            return;
+          }
+
+          let invoicesData: Invoice[] = [];
+          try {
+            invoicesData = await listInvoices();
+          } catch {
+            invoicesData = [];
+          }
+          if (!active) return;
+
+          const invoiceData = invoicesData.find((entry) => entry.id === invoiceIdParam) ?? null;
+          if (!invoiceData) {
+            setLoadError("تعذر العثور على الفاتورة المطلوبة للتعديل.");
+            setInvoiceNumber(invoiceIdParam);
+            setIssueDate(todayDate());
+            setDueDate("");
+            setPaymentMethod("cash");
+            setPaymentStatus("مسودة");
+            setPartialPaidAmount("0");
+            setCurrency("OMR");
+            setSelectedClientId(null);
+            setClientSearch("");
+            setClientEmail("");
+            setClientPhone("");
+            setClientAddress("");
+            setLineItems([defaultRow]);
+            setNextLineId(2);
+            return;
+          }
+
+          const normalizedClientName = invoiceData.client.trim().toLowerCase();
+          const matchedClient = normalizedClientName
+            ? clientsData.find((client) => client.name.trim().toLowerCase() === normalizedClientName) ??
+              clientsData.find((client) =>
+                client.name.trim().toLowerCase().includes(normalizedClientName)
+              ) ??
+              null
+            : null;
+
+          const mappedStatus = normalizePaymentStatus(invoiceData.status);
+          const reconstructedItems = buildSummaryFallbackItems(invoiceData);
+
+          setInvoiceNumber(invoiceData.id);
+          setIssueDate(toDateInputValue(invoiceData.date, todayDate()));
+          setDueDate(toDateInputValue(invoiceData.dueDate, ""));
+          setPaymentMethod(toDateInputValue(invoiceData.dueDate, "") ? "credit" : "cash");
+          setPaymentStatus(mappedStatus);
+          setPartialPaidAmount(
+            mappedStatus === "مدفوعة جزئيا" ? String(Math.max(0, invoiceData.paid)) : "0"
+          );
+          setCurrency(invoiceData.currency || "OMR");
+
+          if (matchedClient) {
+            setSelectedClientId(matchedClient.id);
+            setClientSearch(matchedClient.name);
+            setClientEmail(matchedClient.email);
+            setClientPhone(matchedClient.phone);
+            setClientAddress(matchedClient.address);
+          } else {
+            setSelectedClientId(null);
+            setClientSearch(invoiceData.client === "-" ? "" : invoiceData.client);
+            setClientEmail("");
+            setClientPhone("");
+            setClientAddress("");
+          }
+
+          setLineItems(reconstructedItems);
+          setNextLineId(getNextLineId(reconstructedItems));
+          setEditNotice(
+            "تم تحميل البيانات الأساسية فقط. بنود الفاتورة الأصلية غير متاحة لهذه الفاتورة."
+          );
+          return;
+        }
+
+        setPaymentMethod("cash");
+        setPaymentStatus("مسودة");
+        setPartialPaidAmount("0");
+        setIssueDate(todayDate());
+        setDueDate("");
+        setCurrency("OMR");
+        setSelectedClientId(null);
+        setClientSearch("");
+        setClientEmail("");
+        setClientPhone("");
+        setClientAddress("");
         setLineItems([defaultRow]);
         setNextLineId(2);
+
+        const storedSequence = Number.parseInt(
+          window.localStorage.getItem(INVOICE_SEQUENCE_KEY) ?? "0",
+          10
+        );
+        const safeSequence = Number.isFinite(storedSequence) ? Math.max(0, storedSequence) : 0;
+        const newSequence = safeSequence + 1;
+        setInvoiceSequence(newSequence);
+        setInvoiceNumber(formatInvoiceNumber(newSequence));
       } catch (error) {
         if (!active) return;
         setLoadError(getErrorMessage(error, "تعذر تحميل البيانات المرتبطة بالفاتورة."));
+        setEditNotice("");
         setAvailableProducts([]);
         setClientsList([]);
         setCompanySettings(emptySettings);
         const defaultRow = makeServiceRow(1, toPositiveNumber(defaultTaxRate, 0));
+        setIssueDate(todayDate());
+        setDueDate("");
+        setPaymentMethod("cash");
+        setPaymentStatus("مسودة");
+        setPartialPaidAmount("0");
+        setCurrency("OMR");
+        setSelectedClientId(null);
+        setClientSearch("");
+        setClientEmail("");
+        setClientPhone("");
+        setClientAddress("");
+        setNotes("");
         setLineItems([defaultRow]);
         setNextLineId(2);
+        if (isEditMode) {
+          setInvoiceNumber(invoiceIdParam || "INV-0001");
+        }
       }
-
-      const storedSequence = Number.parseInt(
-        window.localStorage.getItem(INVOICE_SEQUENCE_KEY) ?? "0",
-        10
-      );
-      const safeSequence = Number.isFinite(storedSequence) ? Math.max(0, storedSequence) : 0;
-      const newSequence = safeSequence + 1;
-      setInvoiceSequence(newSequence);
-      setInvoiceNumber(formatInvoiceNumber(newSequence));
     };
 
     loadData();
     return () => {
       active = false;
     };
-  }, []);
+  }, [invoiceIdParam, isEditMode, isRouteReady]);
 
   const selectedClient = useMemo(
     () => clientsList.find((client) => client.id === selectedClientId) ?? null,
@@ -394,6 +756,41 @@ export default function NewInvoicePage() {
         : makeServiceRow(1, toPositiveNumber(defaultTaxRate, 0)),
     ]);
     setNextLineId(2);
+  };
+
+  const buildDraftSnapshot = (): StoredInvoiceDraft => {
+    const sanitizedItems = lineItems.map((item) => ({
+      ...item,
+      id: Math.max(1, Math.trunc(item.id)),
+      name: item.name.trim(),
+      price: Math.max(0, item.price),
+      quantity: Math.max(1, Math.trunc(item.quantity)),
+      discountValue: Math.max(0, item.discountValue),
+      taxRate: Math.max(0, item.taxRate),
+      productId:
+        item.itemType === "product" && typeof item.productId === "number"
+          ? Math.trunc(item.productId)
+          : null,
+    }));
+
+    return {
+      invoiceNumber,
+      issueDate,
+      dueDate,
+      paymentMethod,
+      paymentStatus,
+      partialPaidAmount,
+      defaultTaxRate,
+      notes,
+      currency,
+      selectedClientId,
+      clientSearch,
+      clientEmail,
+      clientPhone,
+      clientAddress,
+      lineItems: sanitizedItems,
+      nextLineId: Math.max(nextLineId, getNextLineId(sanitizedItems)),
+    };
   };
 
   const buildPrintableDocument = (mode: "print" | "pdf") => {
@@ -626,8 +1023,15 @@ export default function NewInvoicePage() {
       });
 
       const savedNumber = savedInvoice?.id || invoiceNumber;
-      setSaveMessage(`تم حفظ الفاتورة ${savedNumber} بنجاح.`);
-      resetForNextInvoice();
+      saveInvoiceDraft(savedNumber, buildDraftSnapshot());
+
+      if (isEditMode) {
+        setInvoiceNumber(savedNumber);
+        setSaveMessage(`تم حفظ تعديلات الفاتورة ${savedNumber} بنجاح.`);
+      } else {
+        setSaveMessage(`تم حفظ الفاتورة ${savedNumber} بنجاح.`);
+        resetForNextInvoice();
+      }
     } catch (error) {
       setSaveError(getErrorMessage(error, "تعذر حفظ الفاتورة."));
     } finally {
@@ -643,8 +1047,12 @@ export default function NewInvoicePage() {
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="text-right">
-              <p className="text-lg font-semibold text-slate-700">فاتورة جديدة</p>
-              <p className="text-xs text-slate-500">رقم تلقائي: {invoiceNumber}</p>
+              <p className="text-lg font-semibold text-slate-700">
+                {isEditMode ? "تعديل فاتورة" : "فاتورة جديدة"}
+              </p>
+              <p className="text-xs text-slate-500">
+                {isEditMode ? "رقم الفاتورة" : "رقم تلقائي"}: {invoiceNumber}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -673,6 +1081,12 @@ export default function NewInvoicePage() {
           {loadError ? (
             <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {loadError}
+            </div>
+          ) : null}
+
+          {editNotice ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              {editNotice}
             </div>
           ) : null}
 
@@ -1217,7 +1631,7 @@ export default function NewInvoicePage() {
                   className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-70"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? "جارٍ الحفظ..." : "حفظ الفاتورة"}
+                  {isSubmitting ? "جارٍ الحفظ..." : isEditMode ? "حفظ التعديلات" : "حفظ الفاتورة"}
                 </button>
                 <Link
                   href="/projects-pages/invoices"

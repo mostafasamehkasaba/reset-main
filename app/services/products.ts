@@ -521,6 +521,60 @@ const buildFormData = (product: ProductPayload) => {
   return formData;
 };
 
+const isFailedToFetchError = (error: unknown) =>
+  error instanceof Error && /failed to fetch/i.test(error.message);
+
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    if (typeof FileReader === "undefined") {
+      reject(new Error("Failed to read image file."));
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error("Failed to read image file."));
+    reader.onload = () => {
+      if (typeof reader.result === "string" && reader.result) {
+        resolve(reader.result);
+        return;
+      }
+
+      reject(new Error("Failed to read image file."));
+    };
+    reader.readAsDataURL(file);
+  });
+
+const persistCreatedProductFromPayload = (payload: unknown, fallback: ProductPayload) => {
+  const record = asRecord(payload);
+  const createdProduct = normalizeCreatedProduct(record?.data || record?.product || payload, fallback);
+  persistCreatedProduct(createdProduct);
+  return createdProduct;
+};
+
+const createLocalFallbackProduct = async (product: ProductPayload) => {
+  let fallbackImageUrl = product.imageUrl || FALLBACK_PRODUCT_IMAGE;
+
+  if (product.imageFile) {
+    try {
+      fallbackImageUrl = await readFileAsDataUrl(product.imageFile);
+    } catch {
+      fallbackImageUrl = product.imageUrl || FALLBACK_PRODUCT_IMAGE;
+    }
+  }
+
+  const fallbackProduct = {
+    ...buildRequestBody({ ...product, imageUrl: fallbackImageUrl, imageFile: null }),
+    id: Date.now(),
+    created_at: product.dateAdded,
+  };
+
+  return persistCreatedProductFromPayload(fallbackProduct, {
+    ...product,
+    imageUrl: fallbackImageUrl,
+    imageFile: null,
+  });
+};
+
 export const listProducts = async () => {
   const localProducts = loadLocalCreatedProducts();
   const payload = await localApiRequest<unknown>("/api/products", {
@@ -535,18 +589,47 @@ export const listProducts = async () => {
 };
 
 export const createProduct = async (product: ProductPayload) => {
+  const token = requireToken();
   const requestBody = product.imageFile
     ? buildFormData(product)
     : JSON.stringify(buildRequestBody(product));
 
-  const payload = await localApiRequest<unknown>("/api/products", {
-    method: "POST",
-    token: requireToken(),
-    body: requestBody,
-  });
+  try {
+    const payload = await localApiRequest<unknown>("/api/products", {
+      method: "POST",
+      token,
+      body: requestBody,
+    });
 
-  const record = asRecord(payload);
-  const createdProduct = normalizeCreatedProduct(record?.data || record?.product || payload, product);
-  persistCreatedProduct(createdProduct);
-  return createdProduct;
+    return persistCreatedProductFromPayload(payload, product);
+  } catch (error) {
+    if (!isFailedToFetchError(error)) {
+      throw error;
+    }
+
+    if (product.imageFile) {
+      try {
+        const imageDataUrl = await readFileAsDataUrl(product.imageFile);
+        const retryPayload = await localApiRequest<unknown>("/api/products", {
+          method: "POST",
+          token,
+          body: JSON.stringify(
+            buildRequestBody({ ...product, imageUrl: imageDataUrl, imageFile: null })
+          ),
+        });
+
+        return persistCreatedProductFromPayload(retryPayload, {
+          ...product,
+          imageUrl: imageDataUrl,
+          imageFile: null,
+        });
+      } catch (retryError) {
+        if (!isFailedToFetchError(retryError)) {
+          throw retryError;
+        }
+      }
+    }
+
+    return createLocalFallbackProduct(product);
+  }
 };

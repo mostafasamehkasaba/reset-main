@@ -393,27 +393,59 @@ export const createMainCategory = async (payload: MainCategoryPayload) => {
 };
 
 export const createSubCategory = async (payload: SubCategoryPayload) => {
-  const categories = loadLocalCategories();
-  const createdCategory = normalizeSubCategory(
-    {
-      ...buildSubPayload(payload),
-      id: getNextNumericId(categories.subCategories, (entry) => entry.id),
-      products: 0,
-    },
-    payload.mainCategoryId,
-    categories.subCategories.length
-  );
+  try {
+    const token = getStoredAuthToken();
+    const response = await apiRequest<unknown>("/api/categories", {
+      method: "POST",
+      ...(token ? { token } : {}),
+      body: JSON.stringify(buildSubPayload(payload)),
+    });
+    const record = asRecord(response);
+    const createdCategory = normalizeSubCategory(
+      {
+        ...buildSubPayload(payload),
+        ...(asRecord(record?.data || record?.category || response) || {}),
+      },
+      payload.mainCategoryId,
+      0
+    );
+    const categories = loadLocalCategories();
+    saveLocalCategories({
+      ...categories,
+      subCategories: upsertByKey(
+        categories.subCategories,
+        createdCategory,
+        getSubCategoryKey
+      ),
+    });
+    return createdCategory;
+  } catch (error) {
+    if (isRecoverableApiError(error)) {
+      const categories = loadLocalCategories();
+      const createdCategory = normalizeSubCategory(
+        {
+          ...buildSubPayload(payload),
+          id: getNextNumericId(categories.subCategories, (entry) => entry.id),
+          products: 0,
+        },
+        payload.mainCategoryId,
+        categories.subCategories.length
+      );
 
-  saveLocalCategories({
-    ...categories,
-    subCategories: upsertByKey(
-      categories.subCategories,
-      createdCategory,
-      getSubCategoryKey
-    ),
-  });
+      saveLocalCategories({
+        ...categories,
+        subCategories: upsertByKey(
+          categories.subCategories,
+          createdCategory,
+          getSubCategoryKey
+        ),
+      });
 
-  return createdCategory;
+      return createdCategory;
+    }
+
+    throw error;
+  }
 };
 
 export const deleteMainCategory = async (categoryId: number) => {
@@ -438,5 +470,22 @@ export const deleteMainCategory = async (categoryId: number) => {
 };
 
 export const deleteSubCategory = async (categoryId: number) => {
-  removeLocalSubCategory(categoryId);
+  try {
+    const token = getStoredAuthToken();
+    await apiRequest(`/api/categories/${categoryId}`, {
+      method: "DELETE",
+      ...(token ? { token } : {}),
+    });
+    removeLocalSubCategory(categoryId);
+  } catch (error) {
+    if (
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && (error.status === 404 || error.status === 405))
+    ) {
+      removeLocalSubCategory(categoryId);
+      return;
+    }
+
+    throw error;
+  }
 };

@@ -344,7 +344,21 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { payload, upstreamBody, includeJsonBody } = await parseRequestPayload(request);
+  let payload: Record<string, unknown>;
+  let upstreamBody: FormData | string;
+  let includeJsonBody: boolean;
+
+  try {
+    ({ payload, upstreamBody, includeJsonBody } = await parseRequestPayload(request));
+  } catch {
+    return NextResponse.json(
+      {
+        message: "تعذر قراءة بيانات المنتج. حاول مجددًا أو استخدم ملف صورة أصغر.",
+      },
+      { status: 400 }
+    );
+  }
+
   const code = getText(payload.code, payload.product_code, payload.sku);
   const name = getText(payload.name, payload.product_name);
   const errors: Record<string, string[]> = {};

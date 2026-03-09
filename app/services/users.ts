@@ -163,7 +163,8 @@ const buildRequestBody = (user: UserPayload) => ({
 });
 
 const buildCreateRequestBody = (user: CreateUserPayload) => ({
-  ...buildRequestBody(user),
+  name: user.name,
+  email: user.email,
   password: user.password,
   password_confirmation: user.passwordConfirmation,
 });

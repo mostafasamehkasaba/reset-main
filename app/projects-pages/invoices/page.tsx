@@ -315,7 +315,7 @@ export default function InvoicesPage() {
               </a>
               <a
                 className="rounded-md border border-slate-200 bg-white px-3 py-2 text-center text-slate-600 hover:bg-slate-50"
-                href="/projects-pages/invoices/new"
+                href={`/projects-pages/invoices/new?id=${encodeURIComponent(selectedInvoice.id)}`}
               >
                 تعديل
               </a>
