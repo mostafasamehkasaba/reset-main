@@ -279,3 +279,30 @@ export const upsertStoredProduct = async (input: unknown) => {
   await saveStoredProducts(nextProducts);
   return merged;
 };
+
+export const removeStoredProduct = async (productIdOrCode: string | number) => {
+  const products = await listStoredProducts();
+  const normalizedCode =
+    typeof productIdOrCode === "string" ? productIdOrCode.trim().toLowerCase() : "";
+  const normalizedId =
+    typeof productIdOrCode === "number"
+      ? Math.floor(productIdOrCode)
+      : typeof productIdOrCode === "string" && /^\d+$/.test(productIdOrCode.trim())
+        ? Math.floor(Number.parseInt(productIdOrCode.trim(), 10))
+        : null;
+
+  const nextProducts = products.filter((product) => {
+    if (normalizedId !== null && product.id === normalizedId) {
+      return false;
+    }
+
+    if (normalizedCode && product.code.trim().toLowerCase() === normalizedCode) {
+      return false;
+    }
+
+    return true;
+  });
+
+  await saveStoredProducts(nextProducts);
+  return nextProducts;
+};

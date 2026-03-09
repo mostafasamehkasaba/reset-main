@@ -30,6 +30,22 @@ export type CreateClientPayload = {
   currency?: string;
 };
 
+export type ClientInvoiceLedgerEntry = {
+  id: string;
+  num: number;
+  clientId: number | null;
+  clientName: string;
+  products: number;
+  total: number;
+  paid: number;
+  discount: number;
+  due: number;
+  currency: string;
+  status: string;
+  date: string;
+  dueDate: string;
+};
+
 const CLIENTS_STORAGE_KEY = "reset-main-clients-v1";
 
 const defaultClients: Client[] = [
@@ -428,6 +444,114 @@ const updateLocalClient = (clientId: number, client: CreateClientPayload) => {
 const removeLocalClient = (clientId: number) => {
   const clients = loadLocalClients();
   saveLocalClients(clients.filter((client) => client.id !== clientId));
+};
+
+const getLedgerEntryKey = (entry: ClientInvoiceLedgerEntry | ClientRecentInvoice) =>
+  String(
+    "num" in entry && typeof entry.num === "number" && Number.isFinite(entry.num)
+      ? entry.num
+      : entry.id
+  );
+
+const normalizeRecentInvoiceDate = (value: string) => {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const toRecentInvoice = (entry: ClientInvoiceLedgerEntry): ClientRecentInvoice => ({
+  id: Math.max(1, Math.trunc(entry.num)),
+  products: Math.max(0, Math.trunc(entry.products)),
+  total: Math.max(0, entry.total),
+  paid: Math.max(0, entry.paid),
+  discount: Math.max(0, entry.discount),
+  due: Math.max(0, entry.due),
+  currency: entry.currency || "OMR",
+  status: entry.status,
+  date: entry.date || "-",
+  dueDate: entry.dueDate || "-",
+});
+
+const recalculateClientInvoices = (client: Client, recentInvoices: ClientRecentInvoice[]) => {
+  const normalizedRecentInvoices = [...recentInvoices].sort((left, right) => {
+    const dateDifference =
+      normalizeRecentInvoiceDate(right.date) - normalizeRecentInvoiceDate(left.date);
+
+    if (dateDifference !== 0) {
+      return dateDifference;
+    }
+
+    return right.id - left.id;
+  });
+
+  const invoiceStats = normalizedRecentInvoices.reduce(
+    (totals, invoice) => ({
+      total: totals.total + invoice.total,
+      paid: totals.paid + invoice.paid,
+      discount: totals.discount + invoice.discount,
+      due: totals.due + invoice.due,
+    }),
+    { total: 0, paid: 0, discount: 0, due: 0 }
+  );
+
+  const openingBalanceDue = Math.max(0, client.openingBalance ?? 0);
+  const totalDue = invoiceStats.due + openingBalanceDue;
+
+  return {
+    ...client,
+    invoices: normalizedRecentInvoices.length,
+    due: totalDue,
+    stats: {
+      total: invoiceStats.total,
+      paid: invoiceStats.paid,
+      discount: invoiceStats.discount,
+      due: totalDue,
+    },
+    recentInvoices: normalizedRecentInvoices,
+  };
+};
+
+const matchesLedgerClient = (client: Client, invoice: ClientInvoiceLedgerEntry) => {
+  if (invoice.clientId !== null) {
+    return client.id === invoice.clientId;
+  }
+
+  return client.name.trim().toLowerCase() === invoice.clientName.trim().toLowerCase();
+};
+
+export const syncLocalClientInvoice = (
+  nextInvoice: ClientInvoiceLedgerEntry | null,
+  previousInvoice: ClientInvoiceLedgerEntry | null = null
+) => {
+  const clients = loadLocalClients();
+  if (clients.length === 0) {
+    return;
+  }
+
+  const nextClients = clients.map((client) => {
+    const touchesPrevious = previousInvoice ? matchesLedgerClient(client, previousInvoice) : false;
+    const touchesNext = nextInvoice ? matchesLedgerClient(client, nextInvoice) : false;
+
+    if (!touchesPrevious && !touchesNext) {
+      return client;
+    }
+
+    let recentInvoices = [...client.recentInvoices];
+
+    if (previousInvoice) {
+      const previousKey = getLedgerEntryKey(previousInvoice);
+      recentInvoices = recentInvoices.filter(
+        (invoice) => getLedgerEntryKey(invoice) !== previousKey
+      );
+    }
+
+    if (nextInvoice) {
+      recentInvoices = upsertByKey(recentInvoices, toRecentInvoice(nextInvoice), getLedgerEntryKey);
+    }
+
+    return recalculateClientInvoices(client, recentInvoices);
+  });
+
+  saveLocalClients(nextClients);
 };
 
 export const listClients = async () => {

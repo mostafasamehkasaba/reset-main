@@ -1,7 +1,7 @@
-import { getStoredAuthToken } from "../lib/auth-session";
+﻿import { getStoredAuthToken } from "../lib/auth-session";
 import { API_BASE_URL } from "../lib/constant";
 import { ApiError } from "../lib/fetcher";
-import type { Product, ProductTaxMode, ProductUnit } from "../lib/product-store";
+import { PRODUCT_UNITS, type Product, type ProductTaxMode, type ProductUnit } from "../lib/product-store";
 
 export type ProductPayload = {
   code: string;
@@ -69,7 +69,7 @@ const localApiRequest = async <T>(
     const message =
       (typeof payload === "string" && payload.trim()) ||
       (asRecord(payload)?.message as string | undefined) ||
-      `فشل الطلب (${response.status}).`;
+      `ظپط´ظ„ ط§ظ„ط·ظ„ط¨ (${response.status}).`;
     throw new ApiError(message, response.status, payload);
   }
 
@@ -125,23 +125,23 @@ const toApiImageUrl = (value: string) => {
 const normalizeUnit = (value: unknown): ProductUnit => {
   const normalized = getFirstText(value).toLowerCase();
 
-  if (normalized === "piece" || normalized === "قطعة") return "قطعة";
-  if (normalized === "carton" || normalized === "كرتونة") return "كرتونة";
-  if (normalized === "meter" || normalized === "متر") return "متر";
-  if (normalized === "kilo" || normalized === "kilogram" || normalized === "kg" || normalized === "كيلو") {
-    return "كيلو";
+  if (normalized === "piece" || normalized === "ظ‚ط·ط¹ط©") return "ظ‚ط·ط¹ط©" as ProductUnit;
+  if (normalized === "carton" || normalized === "ظƒط±طھظˆظ†ط©") return "ظƒط±طھظˆظ†ط©" as ProductUnit;
+  if (normalized === "meter" || normalized === "ظ…طھط±") return "ظ…طھط±" as ProductUnit;
+  if (normalized === "kilo" || normalized === "kilogram" || normalized === "kg" || normalized === "ظƒظٹظ„ظˆ") {
+    return "ظƒظٹظ„ظˆ" as ProductUnit;
   }
-  if (normalized === "hour" || normalized === "ساعة") return "ساعة";
-  if (normalized === "service" || normalized === "خدمة") return "خدمة";
+  if (normalized === "hour" || normalized === "ط³ط§ط¹ط©") return "ط³ط§ط¹ط©" as ProductUnit;
+  if (normalized === "service" || normalized === "ط®ط¯ظ…ط©") return "ط®ط¯ظ…ط©" as ProductUnit;
 
-  return "قطعة";
+  return "ظ‚ط·ط¹ط©" as ProductUnit;
 };
 
 const normalizeTaxMode = (value: unknown): ProductTaxMode => {
   const normalized = getFirstText(value).toLowerCase();
 
-  if (normalized === "inclusive" || normalized === "شامل ضريبة") return "inclusive";
-  if (normalized === "none" || normalized === "بدون ضريبة") return "none";
+  if (normalized === "inclusive" || normalized === "ط´ط§ظ…ظ„ ط¶ط±ظٹط¨ط©") return "inclusive";
+  if (normalized === "none" || normalized === "ط¨ط¯ظˆظ† ط¶ط±ظٹط¨ط©") return "none";
   if (normalized === "exclusive") return "rate";
 
   return "rate";
@@ -151,37 +151,29 @@ const normalizeStatus = (value: unknown): Product["status"] => {
   const normalized = getFirstText(value).toLowerCase();
 
   if (
-    normalized === "غير متاح" ||
+    normalized === "ط؛ظٹط± ظ…طھط§ط­" ||
     normalized === "unavailable" ||
     normalized === "inactive" ||
     normalized === "out_of_stock"
   ) {
-    return "غير متاح";
+    return "ط؛ظٹط± ظ…طھط§ط­" as Product["status"];
   }
 
-  return "متاح";
+  return "ظ…طھط§ط­" as Product["status"];
 };
 
 const toApiUnit = (value: ProductUnit) => {
-  switch (value) {
-    case "قطعة":
-      return "piece";
-    case "كرتونة":
-      return "carton";
-    case "متر":
-      return "meter";
-    case "كيلو":
-      return "kilo";
-    case "ساعة":
-      return "hour";
-    case "خدمة":
-      return "service";
-    default:
-      return "piece";
-  }
+  if (value === PRODUCT_UNITS[0]) return "piece";
+  if (value === PRODUCT_UNITS[1]) return "carton";
+  if (value === PRODUCT_UNITS[2]) return "meter";
+  if (value === PRODUCT_UNITS[3]) return "kilo";
+  if (value === PRODUCT_UNITS[4]) return "hour";
+  if (value === PRODUCT_UNITS[5]) return "service";
+  return "piece";
 };
 
-const toApiStatus = (value: Product["status"]) => (value === "غير متاح" ? "inactive" : "active");
+const toApiStatus = (value: Product["status"]) =>
+  value === ("ط؛ظٹط± ظ…طھط§ط­" as Product["status"]) ? "inactive" : "active";
 
 const toApiDefaultTaxType = (value: ProductTaxMode) =>
   value === "inclusive" ? "inclusive" : "exclusive";
@@ -209,7 +201,7 @@ const normalizeProduct = (input: unknown, index: number): Product => {
       record.sku,
       `PRD-${String(index + 1).padStart(3, "0")}`
     ),
-    name: getFirstText(record.name, record.product_name, `منتج ${index + 1}`),
+    name: getFirstText(record.name, record.product_name, `ظ…ظ†طھط¬ ${index + 1}`),
     category: getFirstText(
       record.category,
       record.category_name,
@@ -356,71 +348,18 @@ const extractCollection = (payload: unknown): unknown[] => {
 const requireToken = () => {
   const token = getStoredAuthToken();
   if (!token) {
-    throw new Error("الجلسة غير متاحة. سجل الدخول أولًا.");
+    throw new Error("ط§ظ„ط¬ظ„ط³ط© ط؛ظٹط± ظ…طھط§ط­ط©. ط³ط¬ظ„ ط§ظ„ط¯ط®ظˆظ„ ط£ظˆظ„ظ‹ط§.");
   }
 
   return token;
 };
 
-const loadLocalCreatedProducts = (): Product[] => {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = window.localStorage.getItem(LOCAL_CREATED_PRODUCTS_STORAGE_KEY);
-    if (!raw) return [];
-
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed.map((product, index) => normalizeProduct(product, index));
-  } catch {
-    return [];
+const clearLocalCreatedProductsCache = () => {
+  if (typeof window === "undefined") {
+    return;
   }
-};
 
-const saveLocalCreatedProducts = (products: Product[]) => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(LOCAL_CREATED_PRODUCTS_STORAGE_KEY, JSON.stringify(products));
-};
-
-const getProductKey = (product: Pick<Product, "code">) => product.code.trim().toLowerCase();
-
-const persistCreatedProduct = (product: Product) => {
-  const current = loadLocalCreatedProducts();
-  const productKey = getProductKey(product);
-  const next = [product, ...current.filter((entry) => getProductKey(entry) !== productKey)];
-  saveLocalCreatedProducts(next);
-};
-
-const mergeRemoteAndLocalProducts = (remoteProducts: Product[], localProducts: Product[]) => {
-  const localProductsByKey = new Map(localProducts.map((product) => [getProductKey(product), product]));
-  const mergedRemoteProducts = remoteProducts.map((remoteProduct) => {
-    const localProduct = localProductsByKey.get(getProductKey(remoteProduct));
-
-    if (!localProduct) {
-      return remoteProduct;
-    }
-
-    return {
-      ...remoteProduct,
-      category: remoteProduct.category === "-" ? localProduct.category : remoteProduct.category,
-      description:
-        remoteProduct.description === "-" ? localProduct.description : remoteProduct.description,
-      imageUrl:
-        remoteProduct.imageUrl === FALLBACK_PRODUCT_IMAGE
-          ? localProduct.imageUrl
-          : remoteProduct.imageUrl,
-      supplierName:
-        remoteProduct.supplierName === "-" ? localProduct.supplierName : remoteProduct.supplierName,
-    };
-  });
-
-  const remoteKeys = new Set(mergedRemoteProducts.map((product) => getProductKey(product)));
-  const pendingLocalProducts = localProducts.filter(
-    (product) => !remoteKeys.has(getProductKey(product))
-  );
-
-  return [...pendingLocalProducts, ...mergedRemoteProducts];
+  window.localStorage.removeItem(LOCAL_CREATED_PRODUCTS_STORAGE_KEY);
 };
 
 const buildRequestBody = (product: ProductPayload) => {
@@ -544,39 +483,13 @@ const readFileAsDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-const persistCreatedProductFromPayload = (payload: unknown, fallback: ProductPayload) => {
+const normalizeProductFromPayload = (payload: unknown, fallback: ProductPayload) => {
   const record = asRecord(payload);
-  const createdProduct = normalizeCreatedProduct(record?.data || record?.product || payload, fallback);
-  persistCreatedProduct(createdProduct);
-  return createdProduct;
-};
-
-const createLocalFallbackProduct = async (product: ProductPayload) => {
-  let fallbackImageUrl = product.imageUrl || FALLBACK_PRODUCT_IMAGE;
-
-  if (product.imageFile) {
-    try {
-      fallbackImageUrl = await readFileAsDataUrl(product.imageFile);
-    } catch {
-      fallbackImageUrl = product.imageUrl || FALLBACK_PRODUCT_IMAGE;
-    }
-  }
-
-  const fallbackProduct = {
-    ...buildRequestBody({ ...product, imageUrl: fallbackImageUrl, imageFile: null }),
-    id: Date.now(),
-    created_at: product.dateAdded,
-  };
-
-  return persistCreatedProductFromPayload(fallbackProduct, {
-    ...product,
-    imageUrl: fallbackImageUrl,
-    imageFile: null,
-  });
+  return normalizeCreatedProduct(record?.data || record?.product || payload, fallback);
 };
 
 export const listProducts = async () => {
-  const localProducts = loadLocalCreatedProducts();
+  clearLocalCreatedProductsCache();
   const payload = await localApiRequest<unknown>("/api/products", {
     token: requireToken(),
   });
@@ -585,11 +498,12 @@ export const listProducts = async () => {
     normalizeProduct(product, index)
   );
 
-  return mergeRemoteAndLocalProducts(remoteProducts, localProducts);
+  return remoteProducts;
 };
 
 export const createProduct = async (product: ProductPayload) => {
   const token = requireToken();
+  clearLocalCreatedProductsCache();
   const requestBody = product.imageFile
     ? buildFormData(product)
     : JSON.stringify(buildRequestBody(product));
@@ -601,7 +515,7 @@ export const createProduct = async (product: ProductPayload) => {
       body: requestBody,
     });
 
-    return persistCreatedProductFromPayload(payload, product);
+    return normalizeProductFromPayload(payload, product);
   } catch (error) {
     if (!isFailedToFetchError(error)) {
       throw error;
@@ -618,18 +532,78 @@ export const createProduct = async (product: ProductPayload) => {
           ),
         });
 
-        return persistCreatedProductFromPayload(retryPayload, {
+        return normalizeProductFromPayload(retryPayload, {
           ...product,
           imageUrl: imageDataUrl,
           imageFile: null,
         });
       } catch (retryError) {
-        if (!isFailedToFetchError(retryError)) {
-          throw retryError;
-        }
+        throw retryError;
       }
     }
-
-    return createLocalFallbackProduct(product);
+    throw error;
   }
+};
+
+
+
+export const updateProduct = async (productId: number, product: ProductPayload) => {
+  const token = requireToken();
+  clearLocalCreatedProductsCache();
+  const requestBody = product.imageFile
+    ? buildFormData(product)
+    : JSON.stringify(buildRequestBody(product));
+
+  try {
+    const payload = await localApiRequest<unknown>(
+      `/api/products/${encodeURIComponent(productId)}`,
+      {
+        method: "PUT",
+        token,
+        body: requestBody,
+      }
+    );
+
+    return normalizeProductFromPayload(payload, product);
+  } catch (error) {
+    if (!isFailedToFetchError(error)) {
+      throw error;
+    }
+
+    if (product.imageFile) {
+      try {
+        const imageDataUrl = await readFileAsDataUrl(product.imageFile);
+        const retryPayload = await localApiRequest<unknown>(
+          `/api/products/${encodeURIComponent(productId)}`,
+          {
+            method: "PUT",
+            token,
+            body: JSON.stringify(
+              buildRequestBody({ ...product, imageUrl: imageDataUrl, imageFile: null })
+            ),
+          }
+        );
+
+        return normalizeProductFromPayload(retryPayload, {
+          ...product,
+          imageUrl: imageDataUrl,
+          imageFile: null,
+        });
+      } catch (retryError) {
+        throw retryError;
+      }
+    }
+    throw error;
+  }
+};
+
+export const deleteProduct = async (product: Product) => {
+  const token = requireToken();
+  const productId = product.id;
+  clearLocalCreatedProductsCache();
+
+  await localApiRequest(`/api/products/${encodeURIComponent(productId)}`, {
+    method: "DELETE",
+    token,
+  });
 };

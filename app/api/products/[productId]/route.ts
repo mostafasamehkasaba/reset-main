@@ -1,12 +1,7 @@
-import { Buffer } from "node:buffer";
+﻿import { Buffer } from "node:buffer";
 import { NextResponse } from "next/server";
-import { API_BASE_URL } from "../../lib/constant";
-import {
-  listStoredProducts,
-  mergeStoredProducts,
-  normalizeStoredProduct,
-  upsertStoredProduct,
-} from "./_storage";
+import { API_BASE_URL } from "../../../lib/constant";
+import { removeStoredProduct, upsertStoredProduct } from "../_storage";
 
 export const runtime = "nodejs";
 
@@ -113,32 +108,6 @@ const createErrorBody = (payload: unknown, fallbackMessage: string) => {
   }
 
   return { message: fallbackMessage };
-};
-
-const extractCollection = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
-
-  const record = asRecord(payload);
-  if (!record) {
-    return [];
-  }
-
-  const candidates = [record.data, record.products, record.items, record.results];
-
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      return candidate;
-    }
-
-    const nestedRecord = asRecord(candidate);
-    if (nestedRecord && Array.isArray(nestedRecord.data)) {
-      return nestedRecord.data;
-    }
-  }
-
-  return [];
 };
 
 const buildUpstreamHeaders = (request: Request, includeJsonBody = false) => {
@@ -316,44 +285,21 @@ const buildProductDraft = (payload: Record<string, unknown>) => ({
   tax_mode: getText(payload.tax_mode, payload.taxMode, payload.default_tax_type, "rate"),
 });
 
-export async function GET(request: Request) {
-  const localProducts = await listStoredProducts();
-
-  try {
-    const upstreamResponse = await fetch(upstreamProductsUrl, {
-      method: "GET",
-      headers: buildUpstreamHeaders(request),
-      cache: "no-store",
-    });
-    const upstreamPayload = await readResponsePayload(upstreamResponse);
-
-    if (!upstreamResponse.ok) {
-      if (shouldReturnUpstreamError(upstreamResponse.status)) {
-        return NextResponse.json(
-          createErrorBody(
-            upstreamPayload,
-            getMessageFromPayload(upstreamPayload) || "تعذر تحميل المنتجات."
-          ),
-          { status: upstreamResponse.status }
-        );
-      }
-
-      return NextResponse.json({ data: localProducts });
-    }
-
-    const remoteProducts = extractCollection(upstreamPayload).map((product, index) =>
-      normalizeStoredProduct(product, index)
-    );
-
-    return NextResponse.json({
-      data: mergeStoredProducts(localProducts, remoteProducts),
-    });
-  } catch {
-    return NextResponse.json({ data: localProducts });
+const parseNumericId = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed || !/^\d+$/.test(trimmed)) {
+    return null;
   }
-}
 
-export async function POST(request: Request) {
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+export async function PUT(
+  request: Request,
+  context: { params: Promise<{ productId: string }> }
+) {
+  const { productId } = await context.params;
   let payload: Record<string, unknown>;
   let upstreamBody: FormData | string;
   let includeJsonBody: boolean;
@@ -363,43 +309,31 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json(
       {
-        message: "تعذر قراءة بيانات المنتج. حاول مجددًا أو استخدم ملف صورة أصغر.",
+        message:
+          "تعذر قراءة بيانات المنتج. حاول مجددًا أو استخدم ملف صورة أصغر.",
       },
       { status: 400 }
     );
   }
 
-  const code = getText(payload.code, payload.product_code, payload.sku);
-  const name = getText(payload.name, payload.product_name);
-  const errors: Record<string, string[]> = {};
+  const productDraft: Record<string, unknown> = buildProductDraft(payload);
+  const normalizedId = parseNumericId(productId);
 
-  if (!name) {
-    errors.name = ["اسم المنتج مطلوب."];
+  if (normalizedId !== null) {
+    productDraft.id = normalizedId;
+    productDraft.product_id = normalizedId;
   }
-
-  if (!code) {
-    errors.code = ["كود المنتج مطلوب."];
-  }
-
-  if (Object.keys(errors).length > 0) {
-    return NextResponse.json(
-      {
-        message: "بيانات المنتج غير صالحة.",
-        errors,
-      },
-      { status: 422 }
-    );
-  }
-
-  const productDraft = buildProductDraft(payload);
 
   try {
-    const upstreamResponse = await fetch(upstreamProductsUrl, {
-      method: "POST",
-      headers: buildUpstreamHeaders(request, includeJsonBody),
-      body: upstreamBody,
-      cache: "no-store",
-    });
+    const upstreamResponse = await fetch(
+      `${upstreamProductsUrl}/${encodeURIComponent(productId)}`,
+      {
+        method: "PUT",
+        headers: buildUpstreamHeaders(request, includeJsonBody),
+        body: upstreamBody,
+        cache: "no-store",
+      }
+    );
     const upstreamPayload = await readResponsePayload(upstreamResponse);
 
     if (!upstreamResponse.ok) {
@@ -407,26 +341,63 @@ export async function POST(request: Request) {
         return NextResponse.json(
           createErrorBody(
             upstreamPayload,
-            getMessageFromPayload(upstreamPayload) || "تعذر حفظ المنتج."
+            getMessageFromPayload(upstreamPayload) || "تعذر تحديث المنتج."
           ),
           { status: upstreamResponse.status }
         );
       }
 
       const fallbackProduct = await upsertStoredProduct(productDraft);
-      return NextResponse.json({ data: fallbackProduct }, { status: 201 });
+      return NextResponse.json({ data: fallbackProduct });
     }
 
     const upstreamRecord = asRecord(upstreamPayload);
     const upstreamProduct = upstreamRecord?.data || upstreamRecord?.product || upstreamPayload;
-    const createdProduct = await upsertStoredProduct({
+    const updatedProduct = await upsertStoredProduct({
       ...productDraft,
       ...(asRecord(upstreamProduct) || {}),
     });
 
-    return NextResponse.json({ data: createdProduct }, { status: 201 });
+    return NextResponse.json({ data: updatedProduct });
   } catch {
     const fallbackProduct = await upsertStoredProduct(productDraft);
-    return NextResponse.json({ data: fallbackProduct }, { status: 201 });
+    return NextResponse.json({ data: fallbackProduct });
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ productId: string }> }
+) {
+  const { productId } = await context.params;
+
+  try {
+    const upstreamResponse = await fetch(
+      `${upstreamProductsUrl}/${encodeURIComponent(productId)}`,
+      {
+        method: "DELETE",
+        headers: buildUpstreamHeaders(request),
+        cache: "no-store",
+      }
+    );
+    const upstreamPayload = await readResponsePayload(upstreamResponse);
+
+    if (!upstreamResponse.ok) {
+      if (shouldReturnUpstreamError(upstreamResponse.status)) {
+        return NextResponse.json(
+          createErrorBody(
+            upstreamPayload,
+            getMessageFromPayload(upstreamPayload) || "تعذر حذف المنتج."
+          ),
+          { status: upstreamResponse.status }
+        );
+      }
+    }
+
+    await removeStoredProduct(productId);
+    return NextResponse.json({ ok: true });
+  } catch {
+    await removeStoredProduct(productId);
+    return NextResponse.json({ ok: true });
   }
 }

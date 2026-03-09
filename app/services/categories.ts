@@ -1,13 +1,5 @@
 import { getStoredAuthToken } from "../lib/auth-session";
-import { ApiError, apiRequest } from "../lib/fetcher";
-import {
-  getNextNumericId,
-  isRecoverableApiError,
-  loadStoredValue,
-  mergeUniqueByKey,
-  saveStoredValue,
-  upsertByKey,
-} from "../lib/local-fallback";
+import { apiRequest } from "../lib/fetcher";
 import type { CategoryStatus, MainCategory, SubCategory } from "../types";
 
 export type MainCategoryPayload = {
@@ -22,44 +14,22 @@ export type SubCategoryPayload = {
   status: CategoryStatus;
 };
 
-const CATEGORIES_STORAGE_KEY = "reset-main-categories-v1";
-
-const defaultCategoryState: {
+const emptyCategoryState: {
   mainCategories: MainCategory[];
   subCategories: SubCategory[];
 } = {
-  mainCategories: [
-    {
-      id: 1,
-      name: "خدمات",
-      code: "CAT01",
-      status: "نشط",
-      products: 4,
-    },
-    {
-      id: 2,
-      name: "منتجات رقمية",
-      code: "CAT02",
-      status: "نشط",
-      products: 6,
-    },
-  ],
-  subCategories: [
-    {
-      id: 1,
-      name: "استضافة",
-      mainCategoryId: 1,
-      status: "نشط",
-      products: 2,
-    },
-    {
-      id: 2,
-      name: "قوالب",
-      mainCategoryId: 2,
-      status: "نشط",
-      products: 3,
-    },
-  ],
+  mainCategories: [],
+  subCategories: [],
+};
+
+const CATEGORIES_STORAGE_KEY = "reset-main-categories-v1";
+
+const clearLegacyCategoryCache = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(CATEGORIES_STORAGE_KEY);
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
@@ -126,7 +96,9 @@ const normalizeMainCategory = (input: unknown, index: number): MainCategory => {
       `CAT${String(index + 1).padStart(2, "0")}`
     ).toUpperCase(),
     status: normalizeStatus(record.status ?? record.state),
-    products: Math.floor(getFirstNumber(record.products, record.products_count, record.items_count, 0)),
+    products: Math.floor(
+      getFirstNumber(record.products, record.products_count, record.items_count, 0)
+    ),
   };
 };
 
@@ -142,7 +114,9 @@ const normalizeSubCategory = (
     name: getFirstText(record.name, record.category_name, `تصنيف فرعي ${index + 1}`),
     mainCategoryId,
     status: normalizeStatus(record.status ?? record.state),
-    products: Math.floor(getFirstNumber(record.products, record.products_count, record.items_count, 0)),
+    products: Math.floor(
+      getFirstNumber(record.products, record.products_count, record.items_count, 0)
+    ),
   };
 };
 
@@ -185,48 +159,6 @@ const buildSubPayload = (category: SubCategoryPayload) => ({
   status: category.status,
 });
 
-const getMainCategoryKey = (category: MainCategory) =>
-  getFirstText(category.code, category.name, String(category.id));
-
-const getSubCategoryKey = (category: SubCategory) =>
-  getFirstText(`${category.mainCategoryId}-${category.name}`, String(category.id));
-
-const loadLocalCategories = () =>
-  loadStoredValue(CATEGORIES_STORAGE_KEY, defaultCategoryState, (value) => {
-    const record = asRecord(value) || {};
-    const mainCategories = Array.isArray(record.mainCategories)
-      ? record.mainCategories.map((item, index) => normalizeMainCategory(item, index))
-      : defaultCategoryState.mainCategories;
-    const subCategories = Array.isArray(record.subCategories)
-      ? record.subCategories.map((item, index) =>
-          normalizeSubCategory(
-            item,
-            Math.floor(
-              getFirstNumber(
-                asRecord(item)?.mainCategoryId,
-                asRecord(item)?.main_category_id,
-                asRecord(item)?.parent_id,
-                0
-              )
-            ),
-            index
-          )
-        )
-      : defaultCategoryState.subCategories;
-
-    return {
-      mainCategories: mainCategories.length ? mainCategories : defaultCategoryState.mainCategories,
-      subCategories: subCategories.length ? subCategories : defaultCategoryState.subCategories,
-    };
-  });
-
-const saveLocalCategories = (value: {
-  mainCategories: MainCategory[];
-  subCategories: SubCategory[];
-}) => {
-  saveStoredValue(CATEGORIES_STORAGE_KEY, value);
-};
-
 const getRemoteParentId = (record: Record<string, unknown>) =>
   Math.floor(
     getFirstNumber(
@@ -241,251 +173,128 @@ const getRemoteParentId = (record: Record<string, unknown>) =>
     )
   );
 
-const resolveKnownSubCategoryParentId = (
-  record: Record<string, unknown>,
-  localCategories: { subCategories: SubCategory[] }
-) => {
-  const directParentId = getRemoteParentId(record);
-  if (directParentId > 0) {
-    return directParentId;
-  }
+const buildCategoriesResponse = (payload: unknown) => {
+  const records = extractCollection(payload);
+  const mainCategories: MainCategory[] = [];
+  const subCategories: SubCategory[] = [];
 
-  const recordId = Math.floor(getFirstNumber(record.id, record.category_id, 0));
-  if (recordId > 0) {
-    const byId = localCategories.subCategories.find((item) => item.id === recordId);
-    if (byId) {
-      return byId.mainCategoryId;
+  records.forEach((item) => {
+    const record = asRecord(item) || {};
+    const parentId = getRemoteParentId(record);
+
+    if (parentId > 0) {
+      subCategories.push(normalizeSubCategory(record, parentId, subCategories.length));
+      return;
     }
-  }
 
-  const recordName = getFirstText(record.name, record.category_name).toLowerCase();
-  if (recordName) {
-    const byName = localCategories.subCategories.find(
-      (item) => item.name.trim().toLowerCase() === recordName
-    );
-    if (byName) {
-      return byName.mainCategoryId;
-    }
-  }
-
-  return 0;
-};
-
-const removeLocalMainCategory = (categoryId: number) => {
-  const categories = loadLocalCategories();
-  saveLocalCategories({
-    mainCategories: categories.mainCategories.filter((category) => category.id !== categoryId),
-    subCategories: categories.subCategories.filter(
-      (category) => category.mainCategoryId !== categoryId
-    ),
+    mainCategories.push(normalizeMainCategory(record, mainCategories.length));
   });
-};
 
-const removeLocalSubCategory = (categoryId: number) => {
-  const categories = loadLocalCategories();
-  saveLocalCategories({
-    ...categories,
-    subCategories: categories.subCategories.filter((category) => category.id !== categoryId),
-  });
+  return { mainCategories, subCategories };
 };
 
 export const listCategories = async () => {
-  const localCategories = loadLocalCategories();
+  clearLegacyCategoryCache();
+  const token = getStoredAuthToken();
+  const payload = await apiRequest<unknown>("/api/categories", {
+    ...(token ? { token } : {}),
+  });
 
-  try {
-    const token = getStoredAuthToken();
-    const payload = await apiRequest<unknown>("/api/categories", {
-      ...(token ? { token } : {}),
-    });
-
-    const records = extractCollection(payload);
-    const remoteMainCategories: MainCategory[] = [];
-    const remoteSubCategories: SubCategory[] = [];
-
-    records.forEach((item) => {
-      const record = asRecord(item) || {};
-      const parentId = resolveKnownSubCategoryParentId(record, localCategories);
-
-      if (parentId > 0) {
-        remoteSubCategories.push(
-          normalizeSubCategory(record, parentId, remoteSubCategories.length)
-        );
-        return;
-      }
-
-      remoteMainCategories.push(normalizeMainCategory(record, remoteMainCategories.length));
-    });
-
-    const merged = {
-      mainCategories: mergeUniqueByKey(
-        localCategories.mainCategories,
-        remoteMainCategories,
-        getMainCategoryKey
-      ),
-      subCategories: mergeUniqueByKey(
-        localCategories.subCategories,
-        remoteSubCategories,
-        getSubCategoryKey
-      ),
-    };
-
-    saveLocalCategories(merged);
-    return merged;
-  } catch (error) {
-    if (isRecoverableApiError(error)) {
-      return localCategories;
-    }
-
-    throw error;
-  }
+  return buildCategoriesResponse(payload);
 };
 
 export const createMainCategory = async (payload: MainCategoryPayload) => {
-  try {
-    const token = getStoredAuthToken();
-    const response = await apiRequest<unknown>("/api/categories", {
-      method: "POST",
-      ...(token ? { token } : {}),
-      body: JSON.stringify(buildMainPayload(payload)),
-    });
-    const record = asRecord(response);
-    const createdCategory = normalizeMainCategory(
-      {
-        ...buildMainPayload(payload),
-        ...(asRecord(record?.data || record?.category || response) || {}),
-      },
-      0
-    );
-    const categories = loadLocalCategories();
-    saveLocalCategories({
-      ...categories,
-      mainCategories: upsertByKey(
-        categories.mainCategories,
-        createdCategory,
-        getMainCategoryKey
-      ),
-    });
-    return createdCategory;
-  } catch (error) {
-    if (isRecoverableApiError(error)) {
-      const categories = loadLocalCategories();
-      const createdCategory = normalizeMainCategory(
-        {
-          ...buildMainPayload(payload),
-          id: getNextNumericId(categories.mainCategories, (entry) => entry.id),
-          products: 0,
-        },
-        categories.mainCategories.length
-      );
-      saveLocalCategories({
-        ...categories,
-        mainCategories: upsertByKey(
-          categories.mainCategories,
-          createdCategory,
-          getMainCategoryKey
-        ),
-      });
-      return createdCategory;
-    }
-
-    throw error;
-  }
+  clearLegacyCategoryCache();
+  const token = getStoredAuthToken();
+  const response = await apiRequest<unknown>("/api/categories", {
+    method: "POST",
+    ...(token ? { token } : {}),
+    body: JSON.stringify(buildMainPayload(payload)),
+  });
+  const record = asRecord(response);
+  return normalizeMainCategory(
+    {
+      ...buildMainPayload(payload),
+      ...(asRecord(record?.data || record?.category || response) || {}),
+    },
+    0
+  );
 };
 
 export const createSubCategory = async (payload: SubCategoryPayload) => {
-  try {
-    const token = getStoredAuthToken();
-    const response = await apiRequest<unknown>("/api/categories", {
-      method: "POST",
-      ...(token ? { token } : {}),
-      body: JSON.stringify(buildSubPayload(payload)),
-    });
-    const record = asRecord(response);
-    const createdCategory = normalizeSubCategory(
-      {
-        ...buildSubPayload(payload),
-        ...(asRecord(record?.data || record?.category || response) || {}),
-      },
-      payload.mainCategoryId,
-      0
-    );
-    const categories = loadLocalCategories();
-    saveLocalCategories({
-      ...categories,
-      subCategories: upsertByKey(
-        categories.subCategories,
-        createdCategory,
-        getSubCategoryKey
-      ),
-    });
-    return createdCategory;
-  } catch (error) {
-    if (isRecoverableApiError(error)) {
-      const categories = loadLocalCategories();
-      const createdCategory = normalizeSubCategory(
-        {
-          ...buildSubPayload(payload),
-          id: getNextNumericId(categories.subCategories, (entry) => entry.id),
-          products: 0,
-        },
-        payload.mainCategoryId,
-        categories.subCategories.length
-      );
+  clearLegacyCategoryCache();
+  const token = getStoredAuthToken();
+  const response = await apiRequest<unknown>("/api/categories", {
+    method: "POST",
+    ...(token ? { token } : {}),
+    body: JSON.stringify(buildSubPayload(payload)),
+  });
+  const record = asRecord(response);
+  const createdRecord = asRecord(record?.data || record?.category || response) || {};
+  return normalizeSubCategory(
+    {
+      ...buildSubPayload(payload),
+      ...createdRecord,
+    },
+    getRemoteParentId(createdRecord) || payload.mainCategoryId,
+    0
+  );
+};
 
-      saveLocalCategories({
-        ...categories,
-        subCategories: upsertByKey(
-          categories.subCategories,
-          createdCategory,
-          getSubCategoryKey
-        ),
-      });
+export const updateMainCategory = async (categoryId: number, payload: MainCategoryPayload) => {
+  clearLegacyCategoryCache();
+  const token = getStoredAuthToken();
+  const response = await apiRequest<unknown>(`/api/categories/${categoryId}`, {
+    method: "PUT",
+    ...(token ? { token } : {}),
+    body: JSON.stringify(buildMainPayload(payload)),
+  });
+  const record = asRecord(response);
+  return normalizeMainCategory(
+    {
+      ...buildMainPayload(payload),
+      ...(asRecord(record?.data || record?.category || response) || {}),
+      id: categoryId,
+    },
+    0
+  );
+};
 
-      return createdCategory;
-    }
-
-    throw error;
-  }
+export const updateSubCategory = async (categoryId: number, payload: SubCategoryPayload) => {
+  clearLegacyCategoryCache();
+  const token = getStoredAuthToken();
+  const response = await apiRequest<unknown>(`/api/categories/${categoryId}`, {
+    method: "PUT",
+    ...(token ? { token } : {}),
+    body: JSON.stringify(buildSubPayload(payload)),
+  });
+  const record = asRecord(response);
+  const updatedRecord = asRecord(record?.data || record?.category || response) || {};
+  return normalizeSubCategory(
+    {
+      ...buildSubPayload(payload),
+      ...updatedRecord,
+      id: categoryId,
+    },
+    getRemoteParentId(updatedRecord) || payload.mainCategoryId,
+    0
+  );
 };
 
 export const deleteMainCategory = async (categoryId: number) => {
-  try {
-    const token = getStoredAuthToken();
-    await apiRequest(`/api/categories/${categoryId}`, {
-      method: "DELETE",
-      ...(token ? { token } : {}),
-    });
-    removeLocalMainCategory(categoryId);
-  } catch (error) {
-    if (
-      isRecoverableApiError(error) ||
-      (error instanceof ApiError && (error.status === 404 || error.status === 405))
-    ) {
-      removeLocalMainCategory(categoryId);
-      return;
-    }
-
-    throw error;
-  }
+  clearLegacyCategoryCache();
+  const token = getStoredAuthToken();
+  await apiRequest(`/api/categories/${categoryId}`, {
+    method: "DELETE",
+    ...(token ? { token } : {}),
+  });
 };
 
 export const deleteSubCategory = async (categoryId: number) => {
-  try {
-    const token = getStoredAuthToken();
-    await apiRequest(`/api/categories/${categoryId}`, {
-      method: "DELETE",
-      ...(token ? { token } : {}),
-    });
-    removeLocalSubCategory(categoryId);
-  } catch (error) {
-    if (
-      isRecoverableApiError(error) ||
-      (error instanceof ApiError && (error.status === 404 || error.status === 405))
-    ) {
-      removeLocalSubCategory(categoryId);
-      return;
-    }
-
-    throw error;
-  }
+  clearLegacyCategoryCache();
+  const token = getStoredAuthToken();
+  await apiRequest(`/api/categories/${categoryId}`, {
+    method: "DELETE",
+    ...(token ? { token } : {}),
+  });
 };

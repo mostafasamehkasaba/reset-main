@@ -1,4 +1,4 @@
-import { getStoredAuthToken } from "../lib/auth-session";
+﻿import { getStoredAuthToken } from "../lib/auth-session";
 import { ApiError, apiRequest } from "../lib/fetcher";
 import {
   getNextNumericId,
@@ -8,9 +8,12 @@ import {
   saveStoredValue,
   upsertByKey,
 } from "../lib/local-fallback";
-import type { Invoice } from "../types";
+import type { Invoice, InvoiceStatus } from "../types";
+import { syncLocalClientInvoice, type ClientInvoiceLedgerEntry } from "./clients";
 
-export type InvoiceLinePayload = {
+export type InvoicePaymentStatus = "draft" | "paid" | "unpaid" | "partial" | "cancelled";
+
+export type InvoiceLineItemPayload = {
   itemType: "product" | "service";
   productId?: number;
   name: string;
@@ -21,29 +24,67 @@ export type InvoiceLinePayload = {
   taxRate: number;
 };
 
-export type InvoicePaymentStatus = "draft" | "paid" | "unpaid" | "partial" | "cancelled";
-
 export type CreateInvoicePayload = {
   invoiceNumber: string;
   issueDate: string;
   dueDate?: string;
-  status: string;
+  status: InvoicePaymentStatus | InvoiceStatus;
   currency: string;
-  paymentMethod?: string;
-  clientId?: number | null;
-  clientName?: string;
+  paymentMethod: "cash" | "transfer" | "card" | "credit";
+  clientId: number;
+  clientName: string;
   clientEmail?: string;
   clientPhone?: string;
   clientAddress?: string;
   notes?: string;
-  paidAmount?: number;
+  paidAmount: number;
   totals: {
     subtotal: number;
     discount: number;
     tax: number;
     total: number;
   };
-  items: InvoiceLinePayload[];
+  items: InvoiceLineItemPayload[];
+};
+
+type InvoicePaymentMethod = CreateInvoicePayload["paymentMethod"];
+
+type InvoiceRecord = Invoice & {
+  paymentMethod: InvoicePaymentMethod;
+  clientId: number | null;
+  clientEmail: string;
+  clientPhone: string;
+  clientAddress: string;
+  notes: string;
+  subtotal: number;
+  tax: number;
+  items: InvoiceLineItemPayload[];
+};
+
+export type InvoiceDetails = {
+  id: string;
+  backendId?: string;
+  num: number;
+  issueDate: string;
+  dueDate: string;
+  status: InvoiceStatus | string;
+  currency: string;
+  paymentMethod: InvoicePaymentMethod;
+  clientId: number | null;
+  clientName: string;
+  clientEmail: string;
+  clientPhone: string;
+  clientAddress: string;
+  notes: string;
+  paidAmount: number;
+  totals: {
+    subtotal: number;
+    discount: number;
+    tax: number;
+    total: number;
+    due: number;
+  };
+  items: InvoiceLineItemPayload[];
 };
 
 const INVOICES_STORAGE_KEY = "reset-main-invoices-v1";
@@ -77,6 +118,20 @@ const defaultInvoices: Invoice[] = [
     dueDate: "2026-03-08",
     client: "شركة المدار",
   },
+  {
+    id: "INV-0003",
+    num: 3,
+    products: 3,
+    total: 560,
+    paid: 560,
+    discount: 20,
+    due: 0,
+    currency: "SAR",
+    status: "مدفوعة",
+    date: "2026-02-16",
+    dueDate: "2026-02-18",
+    client: "مؤسسة النور",
+  },
 ];
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
@@ -91,6 +146,20 @@ const getFirstText = (...values: unknown[]) => {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) {
       return value.trim();
+    }
+  }
+
+  return "";
+};
+
+const getFirstId = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return String(Math.floor(value));
     }
   }
 
@@ -114,64 +183,162 @@ const getFirstNumber = (...values: unknown[]) => {
   return 0;
 };
 
-const getFirstIdentifier = (...values: unknown[]) => {
+const getFirstArray = (...values: unknown[]) => {
   for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return String(Math.trunc(value));
-    }
-
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
+    if (Array.isArray(value)) {
+      return value;
     }
   }
 
-  return "";
+  return [];
 };
 
-const normalizeStatus = (value: unknown) => {
+const isPaymentMethod = (value: unknown): value is InvoicePaymentMethod =>
+  value === "cash" || value === "transfer" || value === "card" || value === "credit";
+
+const normalizePaymentMethod = (value: unknown, dueDate: string): InvoicePaymentMethod => {
+  if (isPaymentMethod(value)) {
+    return value;
+  }
+
+  const normalized = getFirstText(value).toLowerCase();
+  if (normalized === "cash" || normalized === "transfer" || normalized === "card") {
+    return normalized;
+  }
+
+  if (normalized === "credit" || normalized === "deferred" || normalized === "later") {
+    return "credit";
+  }
+
+  return dueDate && dueDate !== "-" ? "credit" : "cash";
+};
+
+const normalizeStatus = (value: unknown): InvoiceStatus => {
   const normalized = getFirstText(value).toLowerCase();
 
-  if (!normalized || normalized === "draft") return "مسودة";
-  if (normalized === "paid" || normalized === "مدفوعة") return "مدفوعة";
+  if (
+    normalized === "paid" ||
+    normalized === "مدفوعة" ||
+    normalized === "completed"
+  ) {
+    return "مدفوعة";
+  }
 
-  if (normalized === "unpaid" || normalized === "غير مدفوعة" || normalized === "pending") {
+  if (
+    normalized === "unpaid" ||
+    normalized === "pending" ||
+    normalized === "due" ||
+    normalized === "غير مدفوعة"
+  ) {
     return "غير مدفوعة";
   }
 
   if (
-    normalized === "partially_paid" ||
     normalized === "partial" ||
+    normalized === "partial_paid" ||
+    normalized === "partially_paid" ||
     normalized === "مدفوعة جزئيا" ||
     normalized === "مدفوعة جزئيًا"
   ) {
     return "مدفوعة جزئيا";
   }
 
-  if (normalized === "cancelled" || normalized === "canceled" || normalized === "ملغاة") {
+  if (
+    normalized === "cancelled" ||
+    normalized === "canceled" ||
+    normalized === "void" ||
+    normalized === "ملغاة"
+  ) {
     return "ملغاة";
   }
 
-  return getFirstText(value, "مسودة");
+  if (normalized === "draft" || normalized === "مسودة") {
+    return "مسودة";
+  }
+
+  return (getFirstText(value) as InvoiceStatus) || "مسودة";
+};
+
+const parseInvoiceNumber = (value: string) => {
+  const match = value.match(/(\d{1,})/g);
+  if (!match) return 0;
+  const joined = match.join("");
+  const parsed = Number.parseInt(joined, 10);
+  return Number.isFinite(parsed) ? parsed : 0;
 };
 
 const normalizeInvoice = (input: unknown, index: number): Invoice => {
   const record = asRecord(input) || {};
-  const total = getFirstNumber(record.total, record.total_amount, record.grand_total);
-  const paid = getFirstNumber(record.paid, record.paid_amount, record.amount_paid);
-  const discount = getFirstNumber(record.discount, record.discount_amount);
-  const due = getFirstNumber(record.due, record.due_amount, record.remaining_amount, total - paid);
+  const clientRecord = asRecord(record.client) || asRecord(record.customer) || {};
+  const itemsCount = Array.isArray(record.items)
+    ? record.items.length
+    : Array.isArray(record.products)
+      ? record.products.length
+      : 0;
 
-  return {
-    id: getFirstText(
+  const id =
+    getFirstId(
+      record.id,
+      record.invoice_id,
+      record.invoiceNumber,
       record.invoice_number,
       record.number,
-      record.id,
-      `INV-${String(index + 1).padStart(4, "0")}`
-    ),
-    backendId: getFirstIdentifier(record.id, record.invoice_id),
-    num: Math.floor(getFirstNumber(record.num, record.sequence, record.id, index + 1)),
+      record.no,
+      record.code,
+      record.invoice_code
+    ) || `INV-${String(index + 1).padStart(4, "0")}`;
+
+  const total = getFirstNumber(
+    record.total,
+    record.total_amount,
+    record.grand_total,
+    record.amount,
+    record.total_price
+  );
+  const paid = getFirstNumber(
+    record.paid,
+    record.paid_amount,
+    record.amount_paid,
+    record.payments_total,
+    record.amount_received
+  );
+  const discount = getFirstNumber(record.discount, record.discount_amount, record.discount_value);
+
+  const computedDue = Math.max(0, total - paid);
+  const due = getFirstNumber(
+    record.due,
+    record.due_amount,
+    record.balance,
+    record.remaining_amount,
+    record.amount_due,
+    computedDue
+  );
+
+  const num = Math.floor(
+    getFirstNumber(
+      record.num,
+      record.sequence,
+      record.invoice_no,
+      record.invoice_number,
+      record.number,
+      record.no,
+      parseInvoiceNumber(id),
+      index + 1
+    )
+  );
+
+  return {
+    id,
+    backendId: getFirstText(record.backendId, record.backend_id),
+    num: num || index + 1,
     products: Math.floor(
-      getFirstNumber(record.products, record.items_count, record.products_count, record.lines_count, 0)
+      getFirstNumber(
+        record.products,
+        record.items_count,
+        record.products_count,
+        record.lines_count,
+        itemsCount
+      )
     ),
     total,
     paid,
@@ -179,26 +346,181 @@ const normalizeInvoice = (input: unknown, index: number): Invoice => {
     due: due < 0 ? 0 : due,
     currency: getFirstText(record.currency, record.currency_code, "OMR"),
     status: normalizeStatus(record.status ?? record.payment_status ?? record.state),
-    date: getFirstText(record.date, record.issue_date, record.created_at, "-"),
-    dueDate: getFirstText(record.dueDate, record.due_date, "-"),
+    date: getFirstText(record.date, record.issue_date, record.invoice_date, record.created_at, "-"),
+    dueDate: getFirstText(record.dueDate, record.due_date, record.payment_due, record.due_on, "-"),
     client: getFirstText(
-      getFirstText(record.client_name),
-      getFirstText(asRecord(record.client)?.name),
-      getFirstText(asRecord(record.customer)?.name),
+      record.client,
+      record.client_name,
+      record.customer_name,
+      record.clientName,
+      record.customer,
+      clientRecord.name,
       "-"
     ),
   };
 };
 
+const normalizeInvoiceItems = (input: unknown): InvoiceLineItemPayload[] => {
+  const rawItems = getFirstArray(
+    input,
+    asRecord(input)?.items,
+    asRecord(input)?.line_items,
+    asRecord(input)?.lines,
+    asRecord(input)?.products
+  );
+
+  return rawItems
+    .map((item) => {
+      const record = asRecord(item);
+      if (!record) {
+        return null;
+      }
+
+      const itemType =
+        getFirstText(record.itemType, record.item_type).toLowerCase() === "product"
+          ? "product"
+          : "service";
+      const productId = getFirstNumber(record.productId, record.product_id);
+      const discountType =
+        getFirstText(record.discountType, record.discount_type).toLowerCase() === "amount"
+          ? "amount"
+          : "percent";
+
+      return {
+        itemType,
+        ...(itemType === "product" && Number.isFinite(productId) && productId > 0
+          ? { productId: Math.trunc(productId) }
+          : {}),
+        name: getFirstText(
+          record.name,
+          record.item_name,
+          record.title,
+          record.description,
+          asRecord(record.product)?.name
+        ),
+        price: Math.max(0, getFirstNumber(record.price, record.unit_price, record.rate)),
+        quantity: Math.max(1, Math.trunc(getFirstNumber(record.quantity, record.qty, 1))),
+        discountType,
+        discountValue: Math.max(
+          0,
+          getFirstNumber(record.discountValue, record.discount_value, record.discount)
+        ),
+        taxRate: Math.max(0, getFirstNumber(record.taxRate, record.tax_rate, record.tax)),
+      };
+    })
+    .filter((item): item is InvoiceLineItemPayload => item !== null && item.name.trim().length > 0);
+};
+
+const normalizeInvoiceRecord = (input: unknown, index: number): InvoiceRecord => {
+  const summary = normalizeInvoice(input, index);
+  const record = asRecord(input) || {};
+  const clientRecord = asRecord(record.client) || asRecord(record.customer) || {};
+  const totalsRecord = asRecord(record.totals) || asRecord(record.summary) || {};
+  const items = normalizeInvoiceItems(input);
+  const subtotalFromItems = items.reduce(
+    (total, item) => total + Math.max(0, item.price) * Math.max(1, item.quantity),
+    0
+  );
+
+  return {
+    ...summary,
+    paymentMethod: normalizePaymentMethod(record.payment_method ?? record.paymentMethod, summary.dueDate),
+    clientId: Math.trunc(
+      getFirstNumber(record.clientId, record.client_id, clientRecord.id, clientRecord.client_id)
+    ) || null,
+    clientEmail: getFirstText(
+      record.clientEmail,
+      record.client_email,
+      clientRecord.email,
+      clientRecord.client_email
+    ),
+    clientPhone: getFirstText(
+      record.clientPhone,
+      record.client_phone,
+      clientRecord.phone,
+      clientRecord.phone_number
+    ),
+    clientAddress: getFirstText(
+      record.clientAddress,
+      record.client_address,
+      clientRecord.address,
+      clientRecord.address_line
+    ),
+    notes: getFirstText(record.notes, record.internal_notes, record.comment),
+    subtotal: getFirstNumber(
+      record.subtotal,
+      totalsRecord.subtotal,
+      record.sub_total,
+      subtotalFromItems
+    ),
+    tax: getFirstNumber(record.tax, totalsRecord.tax, record.tax_amount),
+    items,
+  };
+};
+
+const toInvoiceSummary = (invoice: InvoiceRecord): Invoice => ({
+  id: invoice.id,
+  backendId: invoice.backendId,
+  num: invoice.num,
+  products: invoice.products,
+  total: invoice.total,
+  paid: invoice.paid,
+  discount: invoice.discount,
+  due: invoice.due,
+  currency: invoice.currency,
+  status: invoice.status,
+  date: invoice.date,
+  dueDate: invoice.dueDate,
+  client: invoice.client,
+});
+
+const toInvoiceDetails = (invoice: InvoiceRecord): InvoiceDetails => ({
+  id: invoice.id,
+  backendId: invoice.backendId,
+  num: invoice.num,
+  issueDate: invoice.date,
+  dueDate: invoice.dueDate === "-" ? "" : invoice.dueDate,
+  status: invoice.status,
+  currency: invoice.currency,
+  paymentMethod: invoice.paymentMethod,
+  clientId: invoice.clientId,
+  clientName: invoice.client,
+  clientEmail: invoice.clientEmail,
+  clientPhone: invoice.clientPhone,
+  clientAddress: invoice.clientAddress,
+  notes: invoice.notes,
+  paidAmount: invoice.paid,
+  totals: {
+    subtotal: invoice.subtotal,
+    discount: invoice.discount,
+    tax: invoice.tax,
+    total: invoice.total,
+    due: invoice.due,
+  },
+  items: invoice.items,
+});
+
+const toClientLedgerEntry = (invoice: InvoiceRecord): ClientInvoiceLedgerEntry => ({
+  id: invoice.id,
+  num: invoice.num,
+  clientId: invoice.clientId,
+  clientName: invoice.client,
+  products: invoice.products,
+  total: invoice.total,
+  paid: invoice.paid,
+  discount: invoice.discount,
+  due: invoice.due,
+  currency: invoice.currency,
+  status: String(invoice.status),
+  date: invoice.date,
+  dueDate: invoice.dueDate,
+});
+
 const extractCollection = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
-  }
+  if (Array.isArray(payload)) return payload;
 
   const record = asRecord(payload);
-  if (!record) {
-    return [];
-  }
+  if (!record) return [];
 
   const candidates = [record.data, record.invoices, record.items, record.results];
 
@@ -216,194 +538,150 @@ const extractCollection = (payload: unknown): unknown[] => {
   return [];
 };
 
-const calculateLineTotals = (item: InvoiceLinePayload) => {
-  const safePrice = Math.max(0, item.price);
-  const safeQuantity = Math.max(1, item.quantity);
-  const base = safePrice * safeQuantity;
-  const rawDiscount =
-    item.discountType === "percent"
-      ? (base * Math.max(0, item.discountValue)) / 100
-      : Math.max(0, item.discountValue);
-  const discount = Math.min(base, rawDiscount);
-  const taxable = Math.max(0, base - discount);
-  const tax = (taxable * Math.max(0, item.taxRate)) / 100;
-
+const buildRequestBody = (payload: CreateInvoicePayload) => {
   return {
-    base,
-    discount,
-    tax,
-    total: taxable + tax,
-  };
-};
-
-const buildInvoiceBody = (payload: CreateInvoicePayload) => {
-  const paidAmount = Math.max(0, Math.min(payload.paidAmount ?? 0, payload.totals.total));
-  const dueAmount = Math.max(0, payload.totals.total - paidAmount);
-  const items = payload.items.map((item) => {
-    const totals = calculateLineTotals(item);
-
-    const baseItem = {
-      item_type: item.itemType,
-      itemType: item.itemType,
-      name: item.name,
-      product_name: item.name,
-      price: item.price,
-      unit_price: item.price,
-      unitPrice: item.price,
-      quantity: item.quantity,
-      discount_type: item.discountType,
-      discountType: item.discountType,
-      discount_value: item.discountValue,
-      discountValue: item.discountValue,
-      tax_rate: item.taxRate,
-      taxRate: item.taxRate,
-      base: totals.base,
-      discount: totals.discount,
-      tax: totals.tax,
-      total: totals.total,
-    };
-
-    if (item.itemType === "product" && typeof item.productId === "number") {
-      return {
-        ...baseItem,
-        product_id: item.productId,
-        productId: item.productId,
-      };
-    }
-
-    return baseItem;
-  });
-
-  return {
+    invoiceNumber: payload.invoiceNumber,
     invoice_number: payload.invoiceNumber,
     number: payload.invoiceNumber,
-    date: payload.issueDate,
+    issueDate: payload.issueDate,
     issue_date: payload.issueDate,
+    date: payload.issueDate,
+    dueDate: payload.dueDate,
     due_date: payload.dueDate,
     status: payload.status,
     payment_status: payload.status,
     currency: payload.currency,
-    currency_code: payload.currency,
+    paymentMethod: payload.paymentMethod,
     payment_method: payload.paymentMethod,
-    client_id: payload.clientId,
     clientId: payload.clientId,
-    client_name: payload.clientName,
+    client_id: payload.clientId,
     clientName: payload.clientName,
-    client_email: payload.clientEmail,
+    client_name: payload.clientName,
     clientEmail: payload.clientEmail,
-    client_phone: payload.clientPhone,
+    client_email: payload.clientEmail,
     clientPhone: payload.clientPhone,
-    client_address: payload.clientAddress,
+    client_phone: payload.clientPhone,
     clientAddress: payload.clientAddress,
+    client_address: payload.clientAddress,
     notes: payload.notes,
+    paidAmount: payload.paidAmount,
+    paid_amount: payload.paidAmount,
+    totals: {
+      subtotal: payload.totals.subtotal,
+      discount: payload.totals.discount,
+      tax: payload.totals.tax,
+      total: payload.totals.total,
+    },
     subtotal: payload.totals.subtotal,
-    total: payload.totals.total,
-    total_amount: payload.totals.total,
-    paid: paidAmount,
-    paid_amount: paidAmount,
-    amount_paid: paidAmount,
-    due: dueAmount,
-    due_amount: dueAmount,
     discount: payload.totals.discount,
-    discount_amount: payload.totals.discount,
     tax: payload.totals.tax,
-    tax_amount: payload.totals.tax,
-    tax_total: payload.totals.tax,
-    items,
-    line_items: items,
+    total: payload.totals.total,
+    items: payload.items,
+    line_items: payload.items,
   };
 };
 
-const getInvoiceKey = (invoice: Invoice) => getFirstText(invoice.id, String(invoice.num));
+const defaultInvoiceRecords = defaultInvoices.map((invoice, index) =>
+  normalizeInvoiceRecord(invoice, index)
+);
+
+const getInvoiceKey = (invoice: InvoiceRecord | Invoice) => invoice.id.trim().toLowerCase();
 
 const loadLocalInvoices = () =>
-  loadStoredValue(INVOICES_STORAGE_KEY, defaultInvoices, (value) => {
+  loadStoredValue(INVOICES_STORAGE_KEY, defaultInvoiceRecords, (value) => {
     if (!Array.isArray(value) || value.length === 0) {
-      return defaultInvoices;
+      return defaultInvoiceRecords;
     }
 
-    return value.map((invoice, index) => normalizeInvoice(invoice, index));
+    return value.map((invoice, index) => normalizeInvoiceRecord(invoice, index));
   });
 
-const saveLocalInvoices = (invoices: Invoice[]) => {
+const saveLocalInvoices = (invoices: InvoiceRecord[]) => {
   saveStoredValue(INVOICES_STORAGE_KEY, invoices);
 };
 
-const persistInvoice = (invoice: Invoice) => {
+const persistInvoice = (invoice: InvoiceRecord) => {
   const invoices = loadLocalInvoices();
   saveLocalInvoices(upsertByKey(invoices, invoice, getInvoiceKey));
 };
 
+const removeLocalInvoice = (invoiceId: string) => {
+  const invoices = loadLocalInvoices();
+  const removedInvoice = invoices.find((entry) => entry.id === invoiceId) ?? null;
+  saveLocalInvoices(invoices.filter((invoice) => invoice.id !== invoiceId));
+  return removedInvoice;
+};
+
+const buildLocalInvoiceFromPayload = (
+  payload: CreateInvoicePayload,
+  fallbackId: string,
+  backendId?: string
+) => {
+  const total = Math.max(0, payload.totals.total);
+  const paid = Math.max(0, payload.paidAmount);
+  const discount = Math.max(0, payload.totals.discount);
+  const due = Math.max(0, total - paid);
+
+  return normalizeInvoiceRecord(
+    {
+      id: fallbackId,
+      backend_id: backendId,
+      invoice_number: fallbackId,
+      num: parseInvoiceNumber(fallbackId),
+      products: payload.items.length,
+      subtotal: payload.totals.subtotal,
+      total,
+      paid,
+      discount,
+      tax: payload.totals.tax,
+      due,
+      currency: payload.currency || "OMR",
+      status: payload.status,
+      payment_method: payload.paymentMethod,
+      date: payload.issueDate,
+      due_date: payload.dueDate || "-",
+      client_id: payload.clientId,
+      client_name: payload.clientName,
+      client_email: payload.clientEmail,
+      client_phone: payload.clientPhone,
+      client_address: payload.clientAddress,
+      notes: payload.notes,
+      items: payload.items,
+      line_items: payload.items,
+    },
+    0
+  );
+};
+
 const createLocalInvoice = (payload: CreateInvoicePayload) => {
   const invoices = loadLocalInvoices();
-  const nextInvoiceNumber = getNextNumericId(invoices, (entry) => entry.num);
-  const paidAmount = Math.max(0, Math.min(payload.paidAmount ?? 0, payload.totals.total));
-  const dueAmount = Math.max(0, payload.totals.total - paidAmount);
-  const createdInvoice = normalizeInvoice(
-    {
-      id: payload.invoiceNumber || `INV-${String(nextInvoiceNumber).padStart(4, "0")}`,
-      invoice_number: payload.invoiceNumber,
-      number: payload.invoiceNumber,
-      num: nextInvoiceNumber,
-      products: payload.items.length,
-      items_count: payload.items.length,
-      total: payload.totals.total,
-      total_amount: payload.totals.total,
-      paid: paidAmount,
-      paid_amount: paidAmount,
-      discount: payload.totals.discount,
-      discount_amount: payload.totals.discount,
-      due: dueAmount,
-      due_amount: dueAmount,
-      currency: payload.currency,
-      status: payload.status,
-      payment_status: payload.status,
-      date: payload.issueDate,
-      issue_date: payload.issueDate,
-      due_date: payload.dueDate,
-      dueDate: payload.dueDate,
-      client_name: payload.clientName,
-    },
-    invoices.length
-  );
+  const fallbackId =
+    payload.invoiceNumber || `INV-${String(invoices.length + 1).padStart(4, "0")}`;
+  const createdInvoice = buildLocalInvoiceFromPayload(payload, fallbackId);
 
   saveLocalInvoices(upsertByKey(invoices, createdInvoice, getInvoiceKey));
+  syncLocalClientInvoice(toClientLedgerEntry(createdInvoice));
   return createdInvoice;
 };
 
-const removeLocalInvoice = (invoice: Pick<Invoice, "id" | "backendId">) => {
+const updateLocalInvoice = (invoiceId: string, payload: CreateInvoicePayload) => {
   const invoices = loadLocalInvoices();
-  const normalizedId = invoice.id.trim().toLowerCase();
-  const normalizedBackendId = invoice.backendId?.trim().toLowerCase() || "";
-
-  saveLocalInvoices(
-    invoices.filter((entry) => {
-      const entryId = entry.id.trim().toLowerCase();
-      const entryBackendId = entry.backendId?.trim().toLowerCase() || "";
-
-      if (normalizedId && entryId === normalizedId) {
-        return false;
-      }
-
-      if (normalizedBackendId && entryBackendId === normalizedBackendId) {
-        return false;
-      }
-
-      return true;
-    })
+  const existingInvoice = invoices.find((invoice) => invoice.id === invoiceId) ?? null;
+  const nextInvoice = buildLocalInvoiceFromPayload(
+    payload,
+    invoiceId,
+    existingInvoice?.backendId
   );
-};
 
-const canFallbackInvoiceDeleteError = (error: unknown) => {
-  if (!(error instanceof ApiError)) {
-    return false;
+  if (!existingInvoice) {
+    saveLocalInvoices(upsertByKey(invoices, nextInvoice, getInvoiceKey));
+    syncLocalClientInvoice(toClientLedgerEntry(nextInvoice));
+    return nextInvoice;
   }
 
-  if (error.status === 404 || error.status === 405) {
-    return true;
-  }
-
-  return /No query results for model \[App\\Models\\Invoice\]/i.test(error.message);
+  saveLocalInvoices(invoices.map((invoice) => (invoice.id === invoiceId ? nextInvoice : invoice)));
+  syncLocalClientInvoice(toClientLedgerEntry(nextInvoice), toClientLedgerEntry(existingInvoice));
+  return nextInvoice;
 };
 
 export const listInvoices = async () => {
@@ -415,14 +693,44 @@ export const listInvoices = async () => {
       ...(token ? { token } : {}),
     });
     const remoteInvoices = extractCollection(payload).map((invoice, index) =>
-      normalizeInvoice(invoice, index)
+      normalizeInvoiceRecord(invoice, index)
     );
     const mergedInvoices = mergeUniqueByKey(localInvoices, remoteInvoices, getInvoiceKey);
     saveLocalInvoices(mergedInvoices);
-    return mergedInvoices;
+    return mergedInvoices.map(toInvoiceSummary);
   } catch (error) {
     if (isRecoverableApiError(error)) {
-      return localInvoices;
+      return localInvoices.map(toInvoiceSummary);
+    }
+
+    throw error;
+  }
+};
+
+export const getInvoiceDetails = async (invoiceId: string) => {
+  const findLocalInvoice = () =>
+    loadLocalInvoices().find((invoice) => invoice.id === invoiceId) ?? null;
+
+  const localInvoice = findLocalInvoice();
+  if (localInvoice?.items.length) {
+    return toInvoiceDetails(localInvoice);
+  }
+
+  try {
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>(`/api/invoices/${encodeURIComponent(invoiceId)}`, {
+      ...(token ? { token } : {}),
+    });
+    const record = asRecord(payload);
+    const remoteInvoice = normalizeInvoiceRecord(record?.data || record?.invoice || payload, 0);
+    persistInvoice(remoteInvoice);
+    return toInvoiceDetails(remoteInvoice);
+  } catch (error) {
+    if (
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && (error.status === 404 || error.status === 405))
+    ) {
+      return localInvoice ? toInvoiceDetails(localInvoice) : null;
     }
 
     throw error;
@@ -430,43 +738,101 @@ export const listInvoices = async () => {
 };
 
 export const createInvoice = async (payload: CreateInvoicePayload) => {
+  const invoices = loadLocalInvoices();
+  const fallbackSequence = getNextNumericId(invoices, (item) => item.num);
+  const invoiceId =
+    payload.invoiceNumber.trim() ||
+    `INV-${String(fallbackSequence).padStart(4, "0")}`;
+  const requestBody = JSON.stringify(buildRequestBody(payload));
+
+  const existingInvoice = invoices.find((invoice) => invoice.id === invoiceId) ?? null;
+  const token = getStoredAuthToken();
+
+  if (existingInvoice) {
+    try {
+      const response = await apiRequest<unknown>(
+        `/api/invoices/${encodeURIComponent(invoiceId)}`,
+        {
+          method: "PUT",
+          ...(token ? { token } : {}),
+          body: requestBody,
+        }
+      );
+      const record = asRecord(response);
+      const remoteInvoice = normalizeInvoiceRecord(record?.data || record?.invoice || response, 0);
+      const updatedInvoice = buildLocalInvoiceFromPayload(
+        payload,
+        remoteInvoice.id || invoiceId,
+        remoteInvoice.backendId || existingInvoice.backendId
+      );
+
+      persistInvoice(updatedInvoice);
+      syncLocalClientInvoice(
+        toClientLedgerEntry(updatedInvoice),
+        toClientLedgerEntry(existingInvoice)
+      );
+      return toInvoiceSummary(updatedInvoice);
+    } catch (error) {
+      if (
+        isRecoverableApiError(error) ||
+        (error instanceof ApiError && (error.status === 404 || error.status === 405))
+      ) {
+        return toInvoiceSummary(updateLocalInvoice(invoiceId, payload));
+      }
+
+      throw error;
+    }
+  }
+
   try {
-    const token = getStoredAuthToken();
     const response = await apiRequest<unknown>("/api/invoices", {
       method: "POST",
       ...(token ? { token } : {}),
-      body: JSON.stringify(buildInvoiceBody(payload)),
+      body: requestBody,
     });
-
     const record = asRecord(response);
-    const createdInvoice = normalizeInvoice(record?.data || record?.invoice || response, 0);
+    const remoteInvoice = normalizeInvoiceRecord(record?.data || record?.invoice || response, 0);
+    const createdInvoice = buildLocalInvoiceFromPayload(
+      payload,
+      remoteInvoice.id || invoiceId,
+      remoteInvoice.backendId
+    );
+
     persistInvoice(createdInvoice);
-    return createdInvoice;
+    syncLocalClientInvoice(toClientLedgerEntry(createdInvoice));
+    return toInvoiceSummary(createdInvoice);
   } catch (error) {
     if (isRecoverableApiError(error)) {
-      return createLocalInvoice(payload);
+      return toInvoiceSummary(createLocalInvoice(payload));
     }
 
     throw error;
   }
 };
 
-export const deleteInvoice = async (invoice: Pick<Invoice, "id" | "backendId">) => {
-  const deleteTarget = getFirstText(invoice.backendId, invoice.id);
+export const deleteInvoice = async (invoice: Invoice) => {
+  const invoiceId = invoice.backendId || invoice.id;
+  const localInvoice = loadLocalInvoices().find((entry) => entry.id === invoice.id) ?? null;
 
   try {
     const token = getStoredAuthToken();
-    await apiRequest(`/api/invoices/${encodeURIComponent(deleteTarget)}`, {
+    await apiRequest(`/api/invoices/${encodeURIComponent(invoiceId)}`, {
       method: "DELETE",
       ...(token ? { token } : {}),
     });
-    removeLocalInvoice(invoice);
+    const removedInvoice = removeLocalInvoice(invoice.id);
+    syncLocalClientInvoice(null, toClientLedgerEntry(removedInvoice || localInvoice || normalizeInvoiceRecord(invoice, 0)));
   } catch (error) {
-    if (isRecoverableApiError(error) || canFallbackInvoiceDeleteError(error)) {
-      removeLocalInvoice(invoice);
+    if (
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && (error.status === 404 || error.status === 405))
+    ) {
+      const removedInvoice = removeLocalInvoice(invoice.id);
+      syncLocalClientInvoice(null, toClientLedgerEntry(removedInvoice || localInvoice || normalizeInvoiceRecord(invoice, 0)));
       return;
     }
 
     throw error;
   }
 };
+

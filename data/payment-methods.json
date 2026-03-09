@@ -1,12 +1,1 @@
-[
-  {
-    "id": 1,
-    "name": "بنك العربي الايقريقي",
-    "type": "bank",
-    "payments": 0,
-    "total": 0,
-    "currency": "USD",
-    "desc": "-",
-    "createdAt": "2026-03-08T14:29:51.636Z"
-  }
-]
+[]

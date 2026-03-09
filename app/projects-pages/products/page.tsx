@@ -1,12 +1,13 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import Sidebar from "../../components/Sidebar";
 import TopNav from "../../components/TopNav";
 import { getErrorMessage } from "../../lib/fetcher";
 import type { Product } from "../../lib/product-store";
-import { listProducts } from "../../services/products";
+import { deleteProduct, listProducts } from "../../services/products";
 
 const FALLBACK_PRODUCT_IMAGE = "/file.svg";
 
@@ -16,8 +17,11 @@ export default function ProductsPage() {
   const [query, setQuery] = useState("");
   const [products, setProducts] = useState<Product[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
+  const [deleteProductId, setDeleteProductId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -72,6 +76,26 @@ export default function ProductsPage() {
     [openId, products]
   );
 
+  const selectedDeleteProduct = useMemo(
+    () => products.find((product) => product.id === deleteProductId) ?? null,
+    [deleteProductId, products]
+  );
+
+  const handleDeleteProduct = async (product: Product) => {
+    setDeleteError("");
+    setIsDeleting(true);
+
+    try {
+      await deleteProduct(product);
+      setProducts((prev) => prev.filter((entry) => entry.id !== product.id));
+      setDeleteProductId(null);
+    } catch (error) {
+      setDeleteError(getErrorMessage(error, "تعذر حذف المنتج."));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
       <TopNav currentLabel="المنتجات" />
@@ -123,6 +147,12 @@ export default function ProductsPage() {
             </div>
           ) : null}
 
+          {deleteError ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {deleteError}
+            </div>
+          ) : null}
+
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[980px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
@@ -144,13 +174,13 @@ export default function ProductsPage() {
                   {isLoading ? (
                     <tr>
                       <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
-                        جارٍ تحميل المنتجات...
+                        جاري تحميل المنتجات...
                       </td>
                     </tr>
                   ) : filteredProducts.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-3 py-10 text-center text-slate-500">
-                        لا توجد منتجات من الـ API حاليًا.
+                        لا توجد منتجات من الـ API حاليا.
                       </td>
                     </tr>
                   ) : (
@@ -213,25 +243,102 @@ export default function ProductsPage() {
               </table>
             </div>
           </div>
-
-          {selectedProduct ? (
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <img
-                  src={getProductImageSrc(selectedProduct.imageUrl)}
-                  alt={selectedProduct.name}
-                  className="h-14 w-14 rounded-lg border border-slate-200 bg-slate-50 object-contain p-1"
-                />
-                <div className="text-sm text-slate-600">
-                  تم اختيار المنتج: <span className="font-semibold">{selectedProduct.name}</span>
-                </div>
-              </div>
-            </div>
-          ) : null}
         </main>
 
         <Sidebar activeLabel="المنتجات" />
       </div>
+
+      {selectedProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl" dir="rtl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-3">
+                <img
+                  src={getProductImageSrc(selectedProduct.imageUrl)}
+                  alt={selectedProduct.name}
+                  className="h-12 w-12 rounded-lg border border-slate-200 bg-slate-50 object-contain p-1"
+                />
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">{selectedProduct.name}</p>
+                  <p className="text-xs text-slate-500">{selectedProduct.code}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenId(null)}
+                className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
+                aria-label="إغلاق"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2 text-sm">
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الفئة</span>
+                <span className="font-semibold text-slate-700">{selectedProduct.category}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الكمية</span>
+                <span className="font-semibold text-slate-700">{selectedProduct.quantity}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">سعر البيع</span>
+                <span className="font-semibold text-emerald-700">
+                  {selectedProduct.sellingPrice} {selectedProduct.currency}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الحالة</span>
+                <span className="font-semibold text-slate-700">{selectedProduct.status}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+              <Link
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-center text-slate-600 hover:bg-slate-50"
+                href={`/projects-pages/products/view?id=${encodeURIComponent(selectedProduct.id)}`}
+              >
+                عرض
+              </Link>
+              <Link
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-center text-slate-600 hover:bg-slate-50"
+                href={`/projects-pages/products/new?id=${encodeURIComponent(selectedProduct.id)}`}
+              >
+                تعديل
+              </Link>
+              <button
+                className="col-span-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700 hover:bg-rose-100"
+                type="button"
+                onClick={() => {
+                  setDeleteProductId(selectedProduct.id);
+                  setOpenId(null);
+                }}
+              >
+                حذف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDeleteModal
+        open={deleteProductId !== null}
+        title="تأكيد حذف المنتج"
+        message={
+          selectedDeleteProduct
+            ? `هل تريد حذف المنتج "${selectedDeleteProduct.name}"؟`
+            : "هل تريد حذف هذا المنتج؟"
+        }
+        onClose={() => {
+          if (isDeleting) return;
+          setDeleteProductId(null);
+        }}
+        onConfirm={() => {
+          if (!selectedDeleteProduct || isDeleting) return;
+          void handleDeleteProduct(selectedDeleteProduct);
+        }}
+      />
     </div>
   );
 }

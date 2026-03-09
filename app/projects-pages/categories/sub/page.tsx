@@ -10,6 +10,7 @@ import {
   createSubCategory,
   deleteSubCategory,
   listCategories,
+  updateSubCategory,
 } from "../../../services/categories";
 import type { CategoryStatus, MainCategory, SubCategory } from "../../../types";
 
@@ -23,6 +24,12 @@ const statusLabelMap: Record<string, string> = {
   paused: "معلق",
 };
 
+const emptySubCategoryForm = {
+  name: "",
+  mainCategoryId: 0,
+  status: "نشط" as CategoryStatus,
+};
+
 const getStatusLabel = (value: string) => statusLabelMap[value] ?? value;
 const isActiveStatus = (value: string) => getStatusLabel(value) === "نشط";
 
@@ -30,19 +37,18 @@ export default function SubCategoriesPage() {
   const [query, setQuery] = useState("");
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
   const [mainCategories, setMainCategories] = useState<MainCategory[]>([]);
+  const [openCategoryId, setOpenCategoryId] = useState<number | null>(null);
+  const [viewCategoryId, setViewCategoryId] = useState<number | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<number | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [saveError, setSaveError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newSubCategory, setNewSubCategory] = useState({
-    name: "",
-    mainCategoryId: 0,
-    status: "نشط" as CategoryStatus,
-  });
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [subCategoryForm, setSubCategoryForm] = useState(emptySubCategoryForm);
 
   useEffect(() => {
     let active = true;
@@ -56,7 +62,7 @@ export default function SubCategoriesPage() {
         if (!active) return;
         setMainCategories(data.mainCategories);
         setSubCategories(data.subCategories);
-        setNewSubCategory((prev) => ({
+        setSubCategoryForm((prev) => ({
           ...prev,
           mainCategoryId: prev.mainCategoryId || data.mainCategories[0]?.id || 0,
         }));
@@ -101,32 +107,85 @@ export default function SubCategoriesPage() {
     [subCategories]
   );
 
+  const selectedActionCategory = useMemo(
+    () => subCategories.find((category) => category.id === openCategoryId) ?? null,
+    [openCategoryId, subCategories]
+  );
+
+  const selectedViewCategory = useMemo(
+    () => subCategories.find((category) => category.id === viewCategoryId) ?? null,
+    [subCategories, viewCategoryId]
+  );
+
   const selectedDeleteCategory = useMemo(
     () => subCategories.find((category) => category.id === deleteCategoryId) ?? null,
     [deleteCategoryId, subCategories]
   );
 
-  const handleAddSubCategory = async (event: FormEvent<HTMLFormElement>) => {
+  const resetSubCategoryForm = () => {
+    setSubCategoryForm({
+      ...emptySubCategoryForm,
+      mainCategoryId: mainCategories[0]?.id || 0,
+    });
+    setEditingCategoryId(null);
+  };
+
+  const openAddModal = () => {
+    setSaveError("");
+    resetSubCategoryForm();
+    setShowFormModal(true);
+  };
+
+  const openEditModal = (category: SubCategory) => {
+    setSaveError("");
+    setEditingCategoryId(category.id);
+    setSubCategoryForm({
+      name: category.name,
+      mainCategoryId: category.mainCategoryId,
+      status: isActiveStatus(category.status) ? "نشط" : "معلّق",
+    });
+    setOpenCategoryId(null);
+    setViewCategoryId(null);
+    setShowFormModal(true);
+  };
+
+  const closeFormModal = () => {
+    if (isSaving) return;
+    setShowFormModal(false);
+    resetSubCategoryForm();
+  };
+
+  const handleSaveSubCategory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!newSubCategory.name.trim() || !newSubCategory.mainCategoryId) return;
+    if (!subCategoryForm.name.trim() || !subCategoryForm.mainCategoryId) return;
 
     setSaveError("");
     setIsSaving(true);
 
     try {
-      const category = await createSubCategory({
-        name: newSubCategory.name.trim(),
-        mainCategoryId: newSubCategory.mainCategoryId,
-        status: newSubCategory.status,
-      });
+      if (editingCategoryId !== null) {
+        const updatedCategory = await updateSubCategory(editingCategoryId, {
+          name: subCategoryForm.name.trim(),
+          mainCategoryId: subCategoryForm.mainCategoryId,
+          status: subCategoryForm.status,
+        });
 
-      setSubCategories((prev) => [category, ...prev]);
-      setNewSubCategory((prev) => ({
-        ...prev,
-        name: "",
-        status: "نشط",
-      }));
-      setShowAddModal(false);
+        setSubCategories((prev) =>
+          prev.map((category) =>
+            category.id === editingCategoryId ? updatedCategory : category
+          )
+        );
+      } else {
+        const createdCategory = await createSubCategory({
+          name: subCategoryForm.name.trim(),
+          mainCategoryId: subCategoryForm.mainCategoryId,
+          status: subCategoryForm.status,
+        });
+
+        setSubCategories((prev) => [createdCategory, ...prev]);
+      }
+
+      closeFormModal();
     } catch (error) {
       setSaveError(getErrorMessage(error, "تعذر حفظ التصنيف الفرعي."));
     } finally {
@@ -202,7 +261,7 @@ export default function SubCategoriesPage() {
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(true)}
+                  onClick={openAddModal}
                   className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600"
                 >
                   تصنيف فرعي جديد
@@ -244,20 +303,22 @@ export default function SubCategoriesPage() {
                     <th className="px-2 py-2 text-center sm:px-3 sm:py-3">التصنيف الأساسي</th>
                     <th className="px-2 py-2 text-center sm:px-3 sm:py-3">المنتجات</th>
                     <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الحالة</th>
-                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الحذف</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3" aria-label="الإجراءات">
+                      ...
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
                       <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
-                        جارٍ تحميل التصنيفات الفرعية...
+                        جاري تحميل التصنيفات الفرعية...
                       </td>
                     </tr>
                   ) : filteredSubCategories.length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
-                        لا توجد تصنيفات فرعية حاليًا.
+                        لا توجد تصنيفات فرعية حاليا.
                       </td>
                     </tr>
                   ) : (
@@ -286,13 +347,23 @@ export default function SubCategoriesPage() {
                             {getStatusLabel(category.status)}
                           </span>
                         </td>
-                        <td className="px-2 py-2 text-center sm:px-3 sm:py-3">
+                        <td className="px-2 py-2 text-center text-slate-500 sm:px-3 sm:py-3">
                           <button
                             type="button"
-                            onClick={() => setDeleteCategoryId(category.id)}
-                            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                            onClick={() => setOpenCategoryId(category.id)}
+                            className="rounded-full p-1 hover:bg-slate-200"
+                            aria-label="خيارات"
                           >
-                            حذف
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 24 24"
+                              className="h-4 w-4"
+                              fill="currentColor"
+                            >
+                              <circle cx="12" cy="5" r="1.6" />
+                              <circle cx="12" cy="12" r="1.6" />
+                              <circle cx="12" cy="19" r="1.6" />
+                            </svg>
                           </button>
                         </td>
                       </tr>
@@ -307,17 +378,141 @@ export default function SubCategoriesPage() {
         <Sidebar activeLabel="التصنيفات الفرعية" />
       </div>
 
-      {showAddModal && (
+      {selectedActionCategory ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl" dir="rtl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="text-right">
+                <p className="text-sm font-semibold text-slate-700">خيارات التصنيف الفرعي</p>
+                <p className="text-xs text-slate-500">{selectedActionCategory.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenCategoryId(null)}
+                className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
+                aria-label="إغلاق"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2 text-sm">
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">التصنيف الأساسي</span>
+                <span className="font-semibold text-slate-700">
+                  {mainById[selectedActionCategory.mainCategoryId] ?? "-"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">المنتجات</span>
+                <span className="font-semibold text-slate-700">
+                  {selectedActionCategory.products}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الحالة</span>
+                <span className="font-semibold text-slate-700">
+                  {getStatusLabel(selectedActionCategory.status)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewCategoryId(selectedActionCategory.id);
+                  setOpenCategoryId(null);
+                }}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                عرض
+              </button>
+              <button
+                type="button"
+                onClick={() => openEditModal(selectedActionCategory)}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                تعديل
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteCategoryId(selectedActionCategory.id);
+                  setOpenCategoryId(null);
+                }}
+                className="col-span-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700 hover:bg-rose-100"
+              >
+                حذف
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedViewCategory ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg bg-white p-4 shadow-xl" dir="rtl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="text-right">
+                <p className="text-sm font-semibold text-slate-700">بيانات التصنيف الفرعي</p>
+                <p className="text-xs text-slate-500">{selectedViewCategory.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewCategoryId(null)}
+                className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
+                aria-label="إغلاق"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-2 text-sm">
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الاسم</span>
+                <span className="font-semibold text-slate-700">{selectedViewCategory.name}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">التصنيف الأساسي</span>
+                <span className="font-semibold text-slate-700">
+                  {mainById[selectedViewCategory.mainCategoryId] ?? "-"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">المنتجات</span>
+                <span className="font-semibold text-slate-700">
+                  {selectedViewCategory.products}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الحالة</span>
+                <span className="font-semibold text-slate-700">
+                  {getStatusLabel(selectedViewCategory.status)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showFormModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" dir="rtl">
           <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-3">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">إضافة تصنيف فرعي</h2>
-                <p className="text-sm text-slate-500">حدد التصنيف الأساسي ثم احفظ.</p>
+                <h2 className="text-lg font-bold text-slate-800">
+                  {editingCategoryId !== null ? "تعديل تصنيف فرعي" : "إضافة تصنيف فرعي"}
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {editingCategoryId !== null
+                    ? "حدّث البيانات ثم احفظ التعديلات."
+                    : "حدد التصنيف الأساسي ثم احفظ."}
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={closeFormModal}
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
@@ -325,15 +520,15 @@ export default function SubCategoriesPage() {
               </button>
             </div>
 
-            <form onSubmit={handleAddSubCategory} className="space-y-4">
+            <form onSubmit={handleSaveSubCategory} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <label className="text-sm text-slate-600">
                   الاسم *
                   <input
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
-                    value={newSubCategory.name}
+                    value={subCategoryForm.name}
                     onChange={(event) =>
-                      setNewSubCategory((prev) => ({ ...prev, name: event.target.value }))
+                      setSubCategoryForm((prev) => ({ ...prev, name: event.target.value }))
                     }
                     required
                   />
@@ -343,9 +538,9 @@ export default function SubCategoriesPage() {
                   التصنيف الأساسي
                   <select
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
-                    value={newSubCategory.mainCategoryId}
+                    value={subCategoryForm.mainCategoryId}
                     onChange={(event) =>
-                      setNewSubCategory((prev) => ({
+                      setSubCategoryForm((prev) => ({
                         ...prev,
                         mainCategoryId: Number(event.target.value),
                       }))
@@ -363,9 +558,9 @@ export default function SubCategoriesPage() {
                   الحالة
                   <select
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
-                    value={newSubCategory.status}
+                    value={subCategoryForm.status}
                     onChange={(event) =>
-                      setNewSubCategory((prev) => ({
+                      setSubCategoryForm((prev) => ({
                         ...prev,
                         status: event.target.value as CategoryStatus,
                       }))
@@ -380,7 +575,7 @@ export default function SubCategoriesPage() {
               <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={closeFormModal}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
                 >
                   إلغاء
@@ -390,13 +585,19 @@ export default function SubCategoriesPage() {
                   disabled={isSaving}
                   className="rounded-lg bg-brand-900 px-4 py-2 text-sm text-white hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {isSaving ? "جارٍ الحفظ..." : "حفظ"}
+                  {isSaving
+                    ? editingCategoryId !== null
+                      ? "جارٍ حفظ التعديلات..."
+                      : "جارٍ الحفظ..."
+                    : editingCategoryId !== null
+                      ? "حفظ التعديلات"
+                      : "حفظ"}
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
+      ) : null}
 
       <ConfirmDeleteModal
         open={deleteCategoryId !== null}

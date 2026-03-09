@@ -10,6 +10,7 @@ import {
   createMainCategory,
   deleteMainCategory,
   listCategories,
+  updateMainCategory,
 } from "../../../services/categories";
 import type { CategoryStatus, MainCategory, SubCategory } from "../../../types";
 
@@ -23,6 +24,12 @@ const statusLabelMap: Record<string, string> = {
   paused: "معلق",
 };
 
+const emptyCategoryForm = {
+  name: "",
+  code: "",
+  status: "نشط" as CategoryStatus,
+};
+
 const getStatusLabel = (value: string) => statusLabelMap[value] ?? value;
 const isActiveStatus = (value: string) => getStatusLabel(value) === "نشط";
 
@@ -30,19 +37,18 @@ export default function MainCategoriesPage() {
   const [query, setQuery] = useState("");
   const [categories, setCategories] = useState<MainCategory[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  const [openCategoryId, setOpenCategoryId] = useState<number | null>(null);
+  const [viewCategoryId, setViewCategoryId] = useState<number | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<number | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [saveError, setSaveError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newCategory, setNewCategory] = useState({
-    name: "",
-    code: "",
-    status: "نشط" as CategoryStatus,
-  });
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [categoryForm, setCategoryForm] = useState(emptyCategoryForm);
 
   useEffect(() => {
     let active = true;
@@ -101,32 +107,86 @@ export default function MainCategoriesPage() {
     [subCategories]
   );
 
+  const selectedActionCategory = useMemo(
+    () => categories.find((category) => category.id === openCategoryId) ?? null,
+    [categories, openCategoryId]
+  );
+
+  const selectedViewCategory = useMemo(
+    () => categories.find((category) => category.id === viewCategoryId) ?? null,
+    [categories, viewCategoryId]
+  );
+
   const selectedDeleteCategory = useMemo(
     () => categories.find((category) => category.id === deleteCategoryId) ?? null,
     [categories, deleteCategoryId]
   );
 
-  const handleAddCategory = async (event: FormEvent<HTMLFormElement>) => {
+  const resetCategoryForm = () => {
+    setCategoryForm(emptyCategoryForm);
+    setEditingCategoryId(null);
+  };
+
+  const openAddModal = () => {
+    setSaveError("");
+    resetCategoryForm();
+    setShowFormModal(true);
+  };
+
+  const openEditModal = (category: MainCategory) => {
+    setSaveError("");
+    setEditingCategoryId(category.id);
+    setCategoryForm({
+      name: category.name,
+      code: category.code,
+      status: isActiveStatus(category.status) ? "نشط" : "معلّق",
+    });
+    setOpenCategoryId(null);
+    setViewCategoryId(null);
+    setShowFormModal(true);
+  };
+
+  const closeFormModal = () => {
+    if (isSaving) return;
+    setShowFormModal(false);
+    resetCategoryForm();
+  };
+
+  const handleSaveCategory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!newCategory.name.trim()) return;
+    if (!categoryForm.name.trim()) return;
 
     setSaveError("");
     setIsSaving(true);
 
-    const nextCode = newCategory.code.trim()
-      ? newCategory.code.trim().toUpperCase()
+    const nextCode = categoryForm.code.trim()
+      ? categoryForm.code.trim().toUpperCase()
       : `CAT${String(categories.length + 1).padStart(2, "0")}`;
 
     try {
-      const category = await createMainCategory({
-        name: newCategory.name.trim(),
-        code: nextCode,
-        status: newCategory.status,
-      });
+      if (editingCategoryId !== null) {
+        const updatedCategory = await updateMainCategory(editingCategoryId, {
+          name: categoryForm.name.trim(),
+          code: nextCode,
+          status: categoryForm.status,
+        });
 
-      setCategories((prev) => [category, ...prev]);
-      setNewCategory({ name: "", code: "", status: "نشط" });
-      setShowAddModal(false);
+        setCategories((prev) =>
+          prev.map((category) =>
+            category.id === editingCategoryId ? updatedCategory : category
+          )
+        );
+      } else {
+        const createdCategory = await createMainCategory({
+          name: categoryForm.name.trim(),
+          code: nextCode,
+          status: categoryForm.status,
+        });
+
+        setCategories((prev) => [createdCategory, ...prev]);
+      }
+
+      closeFormModal();
     } catch (error) {
       setSaveError(getErrorMessage(error, "تعذر حفظ التصنيف."));
     } finally {
@@ -205,7 +265,7 @@ export default function MainCategoriesPage() {
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(true)}
+                  onClick={openAddModal}
                   className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600"
                 >
                   تصنيف أساسي جديد
@@ -248,20 +308,22 @@ export default function MainCategoriesPage() {
                     <th className="px-2 py-2 text-center sm:px-3 sm:py-3">عدد الفرعية</th>
                     <th className="px-2 py-2 text-center sm:px-3 sm:py-3">المنتجات</th>
                     <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الحالة</th>
-                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الحذف</th>
+                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3" aria-label="الإجراءات">
+                      ...
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
                       <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
-                        جارٍ تحميل التصنيفات...
+                        جاري تحميل التصنيفات...
                       </td>
                     </tr>
                   ) : filteredCategories.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-3 py-8 text-center text-slate-500">
-                        لا توجد تصنيفات أساسية حاليًا.
+                        لا توجد تصنيفات أساسية حاليا.
                       </td>
                     </tr>
                   ) : (
@@ -293,13 +355,23 @@ export default function MainCategoriesPage() {
                             {getStatusLabel(category.status)}
                           </span>
                         </td>
-                        <td className="px-2 py-2 text-center sm:px-3 sm:py-3">
+                        <td className="px-2 py-2 text-center text-slate-500 sm:px-3 sm:py-3">
                           <button
                             type="button"
-                            onClick={() => setDeleteCategoryId(category.id)}
-                            className="rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                            onClick={() => setOpenCategoryId(category.id)}
+                            className="rounded-full p-1 hover:bg-slate-200"
+                            aria-label="خيارات"
                           >
-                            حذف
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 24 24"
+                              className="h-4 w-4"
+                              fill="currentColor"
+                            >
+                              <circle cx="12" cy="5" r="1.6" />
+                              <circle cx="12" cy="12" r="1.6" />
+                              <circle cx="12" cy="19" r="1.6" />
+                            </svg>
                           </button>
                         </td>
                       </tr>
@@ -314,17 +386,141 @@ export default function MainCategoriesPage() {
         <Sidebar activeLabel="التصنيفات الأساسية" />
       </div>
 
-      {showAddModal && (
+      {selectedActionCategory ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl" dir="rtl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="text-right">
+                <p className="text-sm font-semibold text-slate-700">خيارات التصنيف الأساسي</p>
+                <p className="text-xs text-slate-500">{selectedActionCategory.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenCategoryId(null)}
+                className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
+                aria-label="إغلاق"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2 text-sm">
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الكود</span>
+                <span className="font-semibold text-slate-700">{selectedActionCategory.code}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الفرعية</span>
+                <span className="font-semibold text-slate-700">
+                  {subCountByMain[selectedActionCategory.id] ?? 0}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الحالة</span>
+                <span className="font-semibold text-slate-700">
+                  {getStatusLabel(selectedActionCategory.status)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewCategoryId(selectedActionCategory.id);
+                  setOpenCategoryId(null);
+                }}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                عرض
+              </button>
+              <button
+                type="button"
+                onClick={() => openEditModal(selectedActionCategory)}
+                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
+              >
+                تعديل
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteCategoryId(selectedActionCategory.id);
+                  setOpenCategoryId(null);
+                }}
+                className="col-span-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700 hover:bg-rose-100"
+              >
+                حذف
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedViewCategory ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-lg bg-white p-4 shadow-xl" dir="rtl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="text-right">
+                <p className="text-sm font-semibold text-slate-700">بيانات التصنيف الأساسي</p>
+                <p className="text-xs text-slate-500">{selectedViewCategory.name}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewCategoryId(null)}
+                className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
+                aria-label="إغلاق"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="mt-4 grid gap-2 text-sm">
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الاسم</span>
+                <span className="font-semibold text-slate-700">{selectedViewCategory.name}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الكود</span>
+                <span className="font-semibold text-slate-700">{selectedViewCategory.code}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">عدد الفرعية</span>
+                <span className="font-semibold text-slate-700">
+                  {subCountByMain[selectedViewCategory.id] ?? 0}
+                </span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">المنتجات</span>
+                <span className="font-semibold text-slate-700">{selectedViewCategory.products}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
+                <span className="text-slate-600">الحالة</span>
+                <span className="font-semibold text-slate-700">
+                  {getStatusLabel(selectedViewCategory.status)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showFormModal ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" dir="rtl">
           <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
             <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-3">
               <div>
-                <h2 className="text-lg font-bold text-slate-800">إضافة تصنيف أساسي</h2>
-                <p className="text-sm text-slate-500">أدخل البيانات وسيتم إضافته مباشرة.</p>
+                <h2 className="text-lg font-bold text-slate-800">
+                  {editingCategoryId !== null ? "تعديل تصنيف أساسي" : "إضافة تصنيف أساسي"}
+                </h2>
+                <p className="text-sm text-slate-500">
+                  {editingCategoryId !== null
+                    ? "حدّث بيانات التصنيف ثم احفظ التعديلات."
+                    : "أدخل البيانات وسيتم إضافته مباشرة."}
+                </p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
+                onClick={closeFormModal}
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
@@ -332,15 +528,15 @@ export default function MainCategoriesPage() {
               </button>
             </div>
 
-            <form onSubmit={handleAddCategory} className="space-y-4">
+            <form onSubmit={handleSaveCategory} className="space-y-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <label className="text-sm text-slate-600">
                   الاسم *
                   <input
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
-                    value={newCategory.name}
+                    value={categoryForm.name}
                     onChange={(event) =>
-                      setNewCategory((prev) => ({ ...prev, name: event.target.value }))
+                      setCategoryForm((prev) => ({ ...prev, name: event.target.value }))
                     }
                     required
                   />
@@ -350,9 +546,9 @@ export default function MainCategoriesPage() {
                   الكود
                   <input
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
-                    value={newCategory.code}
+                    value={categoryForm.code}
                     onChange={(event) =>
-                      setNewCategory((prev) => ({ ...prev, code: event.target.value }))
+                      setCategoryForm((prev) => ({ ...prev, code: event.target.value }))
                     }
                   />
                 </label>
@@ -361,9 +557,9 @@ export default function MainCategoriesPage() {
                   الحالة
                   <select
                     className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-brand-800"
-                    value={newCategory.status}
+                    value={categoryForm.status}
                     onChange={(event) =>
-                      setNewCategory((prev) => ({
+                      setCategoryForm((prev) => ({
                         ...prev,
                         status: event.target.value as CategoryStatus,
                       }))
@@ -378,7 +574,7 @@ export default function MainCategoriesPage() {
               <div className="flex items-center justify-end gap-2 border-t border-slate-200 pt-3">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={closeFormModal}
                   className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
                 >
                   إلغاء
@@ -388,13 +584,19 @@ export default function MainCategoriesPage() {
                   disabled={isSaving}
                   className="rounded-lg bg-brand-900 px-4 py-2 text-sm text-white hover:bg-brand-800 disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {isSaving ? "جارٍ الحفظ..." : "حفظ"}
+                  {isSaving
+                    ? editingCategoryId !== null
+                      ? "جارٍ حفظ التعديلات..."
+                      : "جارٍ الحفظ..."
+                    : editingCategoryId !== null
+                      ? "حفظ التعديلات"
+                      : "حفظ"}
                 </button>
               </div>
             </form>
           </div>
         </div>
-      )}
+      ) : null}
 
       <ConfirmDeleteModal
         open={deleteCategoryId !== null}

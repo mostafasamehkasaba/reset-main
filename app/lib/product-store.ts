@@ -48,96 +48,7 @@ export const PRODUCT_TAX_MODES: Array<{ value: ProductTaxMode; label: string }> 
   { value: "none", label: "بدون ضريبة" },
 ];
 
-export const defaultProducts: Product[] = [
-  {
-    id: 1,
-    code: "PRD-001-24",
-    name: "قالب ووردبريس",
-    category: "تصميم",
-    sellingPrice: 20,
-    purchasePrice: 12,
-    defaultTaxRate: 5,
-    quantity: 4,
-    minStockLevel: 3,
-    reorderPoint: 7,
-    sold: 1,
-    description: "لا يوجد",
-    imageUrl: "/file.svg",
-    dateAdded: "2024-08-24",
-    status: "متاح",
-    currency: "OMR",
-    unit: "قطعة",
-    supplierName: "شركة الريادة للتوريد",
-    barcode: "6281000010012",
-    taxMode: "rate",
-  },
-  {
-    id: 2,
-    code: "PRD-002-24",
-    name: "استضافة مشتركة",
-    category: "خدمات",
-    sellingPrice: 30,
-    purchasePrice: 18,
-    defaultTaxRate: 5,
-    quantity: 2,
-    minStockLevel: 2,
-    reorderPoint: 5,
-    sold: 5,
-    description: "باقة شهرية",
-    imageUrl: "/globe.svg",
-    dateAdded: "2024-08-31",
-    status: "متاح",
-    currency: "OMR",
-    unit: "خدمة",
-    supplierName: "مؤسسة المستقبل",
-    barcode: "6281000010013",
-    taxMode: "inclusive",
-  },
-  {
-    id: 3,
-    code: "PRD-003-24",
-    name: "تطوير تطبيق",
-    category: "برمجة",
-    sellingPrice: 120,
-    purchasePrice: 75,
-    defaultTaxRate: 0,
-    quantity: 10,
-    minStockLevel: 4,
-    reorderPoint: 8,
-    sold: 3,
-    description: "لا يوجد",
-    imageUrl: "/next.svg",
-    dateAdded: "2024-09-06",
-    status: "متاح",
-    currency: "OMR",
-    unit: "ساعة",
-    supplierName: "Delta Traders",
-    barcode: "6281000010014",
-    taxMode: "none",
-  },
-  {
-    id: 4,
-    code: "PRD-004-24",
-    name: "ترخيص إضافات",
-    category: "إضافات",
-    sellingPrice: 45,
-    purchasePrice: 22,
-    defaultTaxRate: 10,
-    quantity: 1,
-    minStockLevel: 2,
-    reorderPoint: 4,
-    sold: 2,
-    description: "ترخيص سنوي",
-    imageUrl: "/window.svg",
-    dateAdded: "2024-09-01",
-    status: "متاح",
-    currency: "OMR",
-    unit: "قطعة",
-    supplierName: "شركة الريادة للتوريد",
-    barcode: "6281000010015",
-    taxMode: "rate",
-  },
-];
+export const defaultProducts: Product[] = [];
 
 const toPositiveNumber = (value: unknown, fallback = 0) => {
   const numberValue = Number(value);
@@ -196,7 +107,7 @@ export const loadProductsFromStorage = () => {
     }
 
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) {
+    if (!Array.isArray(parsed)) {
       return defaultProducts;
     }
 

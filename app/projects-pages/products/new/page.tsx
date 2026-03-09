@@ -13,7 +13,7 @@ import {
   type ProductTaxMode,
   type ProductUnit,
 } from "../../../lib/product-store";
-import { createProduct } from "../../../services/products";
+import { createProduct, listProducts, updateProduct } from "../../../services/products";
 
 type ProductFormState = {
   name: string;
@@ -21,6 +21,7 @@ type ProductFormState = {
   barcode: string;
   category: string;
   imageUrl: string;
+  imageFile: File | null;
   sellingPrice: string;
   purchasePrice: string;
   quantity: string;
@@ -37,17 +38,53 @@ type ProductFormState = {
 };
 
 const FALLBACK_PRODUCT_IMAGE = "/file.svg";
-const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
+const SUPPORTED_IMAGE_EXTENSIONS = [
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".bmp",
+  ".svg",
+  ".avif",
+  ".heic",
+  ".heif",
+  ".tif",
+  ".tiff",
+  ".ico",
+  ".jfif",
+  ".pjp",
+  ".pjpeg",
+];
+const IMAGE_INPUT_ACCEPT = ["image/*", ...SUPPORTED_IMAGE_EXTENSIONS].join(",");
+const SUPPORTED_IMAGE_HINT =
+  "JPG, JPEG, PNG, WEBP, GIF, BMP, SVG, AVIF, HEIC, HEIF, TIFF, ICO حتى 10MB";
 
 const todayDate = () => new Date().toISOString().slice(0, 10);
 const createBarcode = () => Date.now().toString().slice(-12).padStart(12, "0");
-const hasAcceptedImageExtension = (fileName: string) =>
-  /\.(png|jpe?g|webp|gif|bmp|svg|avif|heic|heif)$/i.test(fileName);
 
-const revokeObjectUrl = (value: string) => {
-  if (value.startsWith("blob:")) {
-    URL.revokeObjectURL(value);
+const toDateInputValue = (value: string, fallback = todayDate()) => {
+  const text = value.trim();
+  if (!text || text === "-") {
+    return fallback;
   }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    return text;
+  }
+
+  const parsed = new Date(text);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10);
+  }
+
+  return fallback;
+};
+
+const hasAcceptedImageExtension = (fileName: string) => {
+  const lowerFileName = fileName.trim().toLowerCase();
+  return SUPPORTED_IMAGE_EXTENSIONS.some((extension) => lowerFileName.endsWith(extension));
 };
 
 const createInitialState = (): ProductFormState => ({
@@ -56,10 +93,11 @@ const createInitialState = (): ProductFormState => ({
   barcode: createBarcode(),
   category: "",
   imageUrl: "",
+  imageFile: null,
   sellingPrice: "0",
   purchasePrice: "0",
   quantity: "1",
-  unit: "قطعة",
+  unit: PRODUCT_UNITS[0] as ProductUnit,
   minStockLevel: "2",
   reorderPoint: "5",
   taxMode: "rate",
@@ -67,27 +105,55 @@ const createInitialState = (): ProductFormState => ({
   supplierName: "",
   currency: "OMR",
   dateAdded: todayDate(),
-  status: "متاح",
+  status: "متاح" as Product["status"],
   description: "",
+});
+
+const buildFormFromProduct = (product: Product): ProductFormState => ({
+  name: product.name,
+  code: product.code,
+  barcode: product.barcode === "-" ? "" : product.barcode,
+  category: product.category === "-" ? "" : product.category,
+  imageUrl: product.imageUrl === FALLBACK_PRODUCT_IMAGE ? "" : product.imageUrl,
+  imageFile: null,
+  sellingPrice: String(product.sellingPrice),
+  purchasePrice: String(product.purchasePrice),
+  quantity: String(product.quantity),
+  unit: product.unit,
+  minStockLevel: String(product.minStockLevel),
+  reorderPoint: String(product.reorderPoint),
+  taxMode: product.taxMode,
+  defaultTaxRate: String(product.defaultTaxRate),
+  supplierName: product.supplierName === "-" ? "" : product.supplierName,
+  currency: product.currency || "OMR",
+  dateAdded: toDateInputValue(product.dateAdded),
+  status: product.status,
+  description: product.description === "-" ? "" : product.description,
 });
 
 export default function NewProductPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const imagePreviewUrlRef = useRef("");
+  const previewObjectUrlRef = useRef<string | null>(null);
   const [form, setForm] = useState<ProductFormState>(createInitialState);
   const [isCodeManuallyEdited, setIsCodeManuallyEdited] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isReadingImage, setIsReadingImage] = useState(false);
   const [selectedImageName, setSelectedImageName] = useState("");
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const [productIdParam, setProductIdParam] = useState("");
+  const [isRouteReady, setIsRouteReady] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<number | null>(null);
+  const [loadError, setLoadError] = useState("");
+  const isEditMode = productIdParam.length > 0;
 
-  useEffect(() => {
-    return () => {
-      revokeObjectUrl(imagePreviewUrlRef.current);
-    };
-  }, []);
+  const revokePreviewObjectUrl = () => {
+    if (previewObjectUrlRef.current?.startsWith("blob:")) {
+      URL.revokeObjectURL(previewObjectUrlRef.current);
+    }
+
+    previewObjectUrlRef.current = null;
+  };
 
   const updateField = <K extends keyof ProductFormState>(
     key: K,
@@ -96,23 +162,20 @@ export default function NewProductPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const replaceImagePreview = (nextUrl: string) => {
-    setImagePreviewUrl((prev) => {
-      revokeObjectUrl(prev);
-      imagePreviewUrlRef.current = nextUrl;
-      return nextUrl;
-    });
-  };
-
   const resetImageSelection = () => {
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
 
-    setSelectedImageFile(null);
+    revokePreviewObjectUrl();
+    setIsReadingImage(false);
     setSelectedImageName("");
-    replaceImagePreview("");
-    setForm((prev) => ({ ...prev, imageUrl: "" }));
+
+    setForm((prev) => ({
+      ...prev,
+      imageUrl: "",
+      imageFile: null,
+    }));
   };
 
   const handleNameChange = (value: string) => {
@@ -124,24 +187,91 @@ export default function NewProductPage() {
   };
 
   const handleImageButtonClick = () => {
-    if (isSubmitting) return;
+    if (isSubmitting || isReadingImage) {
+      return;
+    }
+
     fileInputRef.current?.click();
   };
 
-  const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  useEffect(() => {
+    const nextProductId = new URLSearchParams(window.location.search).get("id")?.trim() || "";
+    setProductIdParam(nextProductId);
+    setIsRouteReady(true);
+  }, []);
 
+  useEffect(() => {
+    return () => {
+      revokePreviewObjectUrl();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isRouteReady || !isEditMode) {
+      return;
+    }
+
+    let active = true;
+
+    const loadProduct = async () => {
+      setLoadError("");
+      setValidationMessage("");
+
+      try {
+        const products = await listProducts();
+        if (!active) {
+          return;
+        }
+
+        const matchedProduct =
+          products.find((product) => String(product.id) === productIdParam) ?? null;
+
+        if (!matchedProduct) {
+          setLoadError("تعذر العثور على المنتج المطلوب للتعديل.");
+          return;
+        }
+
+        revokePreviewObjectUrl();
+        setEditingProductId(matchedProduct.id);
+        setIsCodeManuallyEdited(true);
+        setSelectedImageName(
+          matchedProduct.imageUrl && matchedProduct.imageUrl !== FALLBACK_PRODUCT_IMAGE
+            ? "صورة حالية"
+            : ""
+        );
+        setForm(buildFormFromProduct(matchedProduct));
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setLoadError(getErrorMessage(error, "تعذر تحميل بيانات المنتج."));
+      }
+    };
+
+    void loadProduct();
+
+    return () => {
+      active = false;
+    };
+  }, [isEditMode, isRouteReady, productIdParam]);
+
+  const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) {
       return;
     }
 
     setSaveMessage("");
+    setValidationMessage("");
 
     const isValidImageFile =
-      file.type.startsWith("image/") || (!file.type && hasAcceptedImageExtension(file.name));
+      file.type.startsWith("image/") ||
+      (!file.type && hasAcceptedImageExtension(file.name)) ||
+      hasAcceptedImageExtension(file.name);
 
     if (!isValidImageFile) {
-      setValidationMessage("يرجى اختيار ملف صورة صالح للمنتج.");
+      setValidationMessage("يرجى اختيار ملف صورة صالح بامتداد مدعوم.");
       resetImageSelection();
       return;
     }
@@ -153,16 +283,27 @@ export default function NewProductPage() {
     }
 
     if (file.size > MAX_IMAGE_SIZE_BYTES) {
-      setValidationMessage("حجم صورة المنتج يجب ألا يتجاوز 2 ميجابايت.");
+      setValidationMessage("حجم صورة المنتج يجب ألا يتجاوز 10 ميجابايت.");
       resetImageSelection();
       return;
     }
 
-    setValidationMessage("");
-    setSelectedImageFile(file);
-    setSelectedImageName(file.name);
-    replaceImagePreview(URL.createObjectURL(file));
-    setForm((prev) => ({ ...prev, imageUrl: "" }));
+    setIsReadingImage(true);
+
+    try {
+      revokePreviewObjectUrl();
+      const previewUrl = URL.createObjectURL(file);
+      previewObjectUrlRef.current = previewUrl;
+
+      setForm((prev) => ({
+        ...prev,
+        imageUrl: previewUrl,
+        imageFile: file,
+      }));
+      setSelectedImageName(file.name);
+    } finally {
+      setIsReadingImage(false);
+    }
   };
 
   const handleRemoveImage = () => {
@@ -185,6 +326,11 @@ export default function NewProductPage() {
       return;
     }
 
+    if (isEditMode && !editingProductId) {
+      setValidationMessage("تعذر تحديد المنتج للتعديل.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -197,7 +343,7 @@ export default function NewProductPage() {
           ? 0
           : Math.max(0, Number.parseFloat(form.defaultTaxRate) || 0);
 
-      const savedProduct = await createProduct({
+      const productPayload = {
         code: form.code.trim(),
         name: form.name.trim(),
         category: form.category.trim() || "-",
@@ -208,8 +354,8 @@ export default function NewProductPage() {
         minStockLevel,
         reorderPoint,
         description: form.description.trim() || "-",
-        imageUrl: form.imageUrl.trim() || FALLBACK_PRODUCT_IMAGE,
-        imageFile: selectedImageFile,
+        imageUrl: form.imageUrl || FALLBACK_PRODUCT_IMAGE,
+        imageFile: form.imageFile,
         dateAdded: form.dateAdded,
         status: form.status,
         currency: form.currency,
@@ -217,15 +363,34 @@ export default function NewProductPage() {
         supplierName: form.supplierName.trim() || "-",
         barcode: form.barcode.trim() || createBarcode(),
         taxMode: form.taxMode,
-      });
+      };
 
-      setSaveMessage(`تم حفظ المنتج بنجاح: ${savedProduct.name} (${savedProduct.code})`);
-      setForm((prev) => ({
-        ...createInitialState(),
-        currency: prev.currency,
-      }));
-      setIsCodeManuallyEdited(false);
-      resetImageSelection();
+      const savedProduct = isEditMode
+        ? await updateProduct(editingProductId ?? 0, productPayload)
+        : await createProduct(productPayload);
+
+      revokePreviewObjectUrl();
+
+      if (isEditMode) {
+        setSaveMessage(`تم حفظ تعديلات المنتج بنجاح: ${savedProduct.name} (${savedProduct.code})`);
+        setSelectedImageName(
+          savedProduct.imageUrl && savedProduct.imageUrl !== FALLBACK_PRODUCT_IMAGE
+            ? "صورة حالية"
+            : ""
+        );
+        setForm(buildFormFromProduct(savedProduct));
+      } else {
+        setSaveMessage(`تم حفظ المنتج بنجاح: ${savedProduct.name} (${savedProduct.code})`);
+        setForm((prev) => ({
+          ...createInitialState(),
+          currency: prev.currency,
+        }));
+        setIsCodeManuallyEdited(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        setSelectedImageName("");
+      }
     } catch (error) {
       setValidationMessage(getErrorMessage(error, "تعذر حفظ المنتج."));
     } finally {
@@ -243,7 +408,9 @@ export default function NewProductPage() {
       >
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
           <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">إضافة منتج جديد</div>
+            <div className="text-right text-lg font-semibold text-slate-700">
+              {isEditMode ? "تعديل المنتج" : "إضافة منتج جديد"}
+            </div>
             <Link
               href="/projects-pages/products"
               className="rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-600"
@@ -251,6 +418,12 @@ export default function NewProductPage() {
               رجوع
             </Link>
           </div>
+
+          {loadError ? (
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {loadError}
+            </div>
+          ) : null}
 
           <form onSubmit={handleSubmit} className="grid gap-4 lg:grid-cols-[280px_1fr]">
             <aside className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -293,35 +466,51 @@ export default function NewProductPage() {
 
               <div className="space-y-2">
                 <label className="text-sm font-semibold text-slate-700">صورة المنتج</label>
-                <img
-                  src={imagePreviewUrl || form.imageUrl || FALLBACK_PRODUCT_IMAGE}
-                  alt="صورة المنتج"
-                  className="h-28 w-full rounded-md border border-slate-200 bg-slate-50 object-contain p-3"
-                />
+
+                <div className="flex h-28 w-full items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-3">
+                  <img
+                    src={form.imageUrl || FALLBACK_PRODUCT_IMAGE}
+                    alt="صورة المنتج"
+                    className="max-h-full max-w-full object-contain"
+                    onError={(event) => {
+                      event.currentTarget.onerror = null;
+                      event.currentTarget.src = FALLBACK_PRODUCT_IMAGE;
+                      setValidationMessage(
+                        form.imageFile
+                          ? "تم اختيار الصورة، لكن المتصفح الحالي لا يدعم معاينتها. سيتم حفظها إذا قبلها الخادم."
+                          : "تعذر عرض صورة المنتج الحالية."
+                      );
+                    }}
+                  />
+                </div>
+
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,.heic,.heif"
+                  accept={IMAGE_INPUT_ACCEPT}
                   className="hidden"
                   onChange={handleImageChange}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isReadingImage}
                 />
+
                 <button
                   type="button"
                   onClick={handleImageButtonClick}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isReadingImage}
                   className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
                 >
                   {selectedImageName ? "تغيير صورة المنتج" : "رفع صورة المنتج"}
                 </button>
+
                 <div className="text-xs text-slate-500">
-                  {selectedImageName || "JPG, PNG, WEBP, HEIC حتى 2MB"}
+                  {selectedImageName || SUPPORTED_IMAGE_HINT}
                 </div>
-                {selectedImageFile || form.imageUrl ? (
+
+                {selectedImageName || form.imageUrl ? (
                   <button
                     type="button"
                     onClick={handleRemoveImage}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isReadingImage}
                     className="w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     إزالة الصورة
@@ -559,7 +748,13 @@ export default function NewProductPage() {
                   disabled={isSubmitting}
                   className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-70"
                 >
-                  {isSubmitting ? "جارٍ حفظ المنتج..." : "حفظ المنتج"}
+                  {isSubmitting
+                    ? isEditMode
+                      ? "جارٍ حفظ التعديلات..."
+                      : "جارٍ حفظ المنتج..."
+                    : isEditMode
+                      ? "حفظ التعديلات"
+                      : "حفظ المنتج"}
                 </button>
                 <Link
                   href="/projects-pages/products"
