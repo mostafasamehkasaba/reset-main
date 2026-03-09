@@ -48,82 +48,7 @@ export type ClientInvoiceLedgerEntry = {
 
 const CLIENTS_STORAGE_KEY = "reset-main-clients-v1";
 
-const defaultClients: Client[] = [
-  {
-    id: 1,
-    name: "شركة المدار",
-    email: "info@almadar.test",
-    phone: "+968 9000 1001",
-    country: "عمان",
-    address: "مسقط",
-    currency: "OMR",
-    invoices: 2,
-    due: 180,
-    stats: {
-      total: 420,
-      paid: 240,
-      discount: 0,
-      due: 180,
-    },
-    recentInvoices: [
-      {
-        id: 1,
-        products: 2,
-        total: 240,
-        paid: 240,
-        discount: 0,
-        due: 0,
-        currency: "OMR",
-        status: "مدفوعة",
-        date: "2026-02-20",
-        dueDate: "2026-02-20",
-      },
-      {
-        id: 2,
-        products: 1,
-        total: 180,
-        paid: 0,
-        discount: 0,
-        due: 180,
-        currency: "OMR",
-        status: "غير مدفوعة",
-        date: "2026-03-01",
-        dueDate: "2026-03-08",
-      },
-    ],
-  },
-  {
-    id: 2,
-    name: "مؤسسة النور",
-    email: "sales@alnoor.test",
-    phone: "+966 500 000 200",
-    country: "السعودية",
-    address: "الرياض",
-    currency: "SAR",
-    invoices: 1,
-    due: 0,
-    stats: {
-      total: 560,
-      paid: 560,
-      discount: 20,
-      due: 0,
-    },
-    recentInvoices: [
-      {
-        id: 3,
-        products: 3,
-        total: 560,
-        paid: 560,
-        discount: 20,
-        due: 0,
-        currency: "SAR",
-        status: "مدفوعة",
-        date: "2026-02-16",
-        dueDate: "2026-02-18",
-      },
-    ],
-  },
-];
+const defaultClients: Client[] = [];
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -364,14 +289,27 @@ const buildRequestBody = (client: CreateClientPayload) => {
 const getClientKey = (client: Client) =>
   getFirstText(client.email, `${client.name}-${client.phone}`, String(client.id));
 
-const loadLocalClients = () =>
-  loadStoredValue(CLIENTS_STORAGE_KEY, defaultClients, (value) => {
+const LEGACY_SEED_CLIENT_EMAILS = new Set(["info@almadar.test", "sales@alnoor.test"]);
+
+const isLegacySeedClient = (client: Client) => LEGACY_SEED_CLIENT_EMAILS.has(client.email);
+
+const loadLocalClients = () => {
+  const clients = loadStoredValue(CLIENTS_STORAGE_KEY, defaultClients, (value) => {
     if (!Array.isArray(value) || value.length === 0) {
       return defaultClients;
     }
 
     return value.map((client, index) => normalizeClient(client, index));
   });
+
+  const filteredClients = clients.filter((client) => !isLegacySeedClient(client));
+
+  if (filteredClients.length !== clients.length) {
+    saveStoredValue(CLIENTS_STORAGE_KEY, filteredClients);
+  }
+
+  return filteredClients;
+};
 
 const saveLocalClients = (clients: Client[]) => {
   saveStoredValue(CLIENTS_STORAGE_KEY, clients);

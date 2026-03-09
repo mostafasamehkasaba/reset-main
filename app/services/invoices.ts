@@ -89,50 +89,7 @@ export type InvoiceDetails = {
 
 const INVOICES_STORAGE_KEY = "reset-main-invoices-v1";
 
-const defaultInvoices: Invoice[] = [
-  {
-    id: "INV-0001",
-    num: 1,
-    products: 2,
-    total: 240,
-    paid: 240,
-    discount: 0,
-    due: 0,
-    currency: "OMR",
-    status: "مدفوعة",
-    date: "2026-02-20",
-    dueDate: "2026-02-20",
-    client: "شركة المدار",
-  },
-  {
-    id: "INV-0002",
-    num: 2,
-    products: 1,
-    total: 180,
-    paid: 0,
-    discount: 0,
-    due: 180,
-    currency: "OMR",
-    status: "غير مدفوعة",
-    date: "2026-03-01",
-    dueDate: "2026-03-08",
-    client: "شركة المدار",
-  },
-  {
-    id: "INV-0003",
-    num: 3,
-    products: 3,
-    total: 560,
-    paid: 560,
-    discount: 20,
-    due: 0,
-    currency: "SAR",
-    status: "مدفوعة",
-    date: "2026-02-16",
-    dueDate: "2026-02-18",
-    client: "مؤسسة النور",
-  },
-];
+const defaultInvoices: Invoice[] = [];
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -581,20 +538,49 @@ const buildRequestBody = (payload: CreateInvoicePayload) => {
   };
 };
 
+const isLegacySeedInvoice = (invoice: InvoiceRecord) => {
+  return (
+    (invoice.id === "INV-0001" &&
+      invoice.total === 240 &&
+      invoice.paid === 240 &&
+      invoice.client === "شركة المدار" &&
+      invoice.date === "2026-02-20") ||
+    (invoice.id === "INV-0002" &&
+      invoice.total === 180 &&
+      invoice.paid === 0 &&
+      invoice.client === "شركة المدار" &&
+      invoice.date === "2026-03-01") ||
+    (invoice.id === "INV-0003" &&
+      invoice.total === 560 &&
+      invoice.paid === 560 &&
+      invoice.client === "مؤسسة النور" &&
+      invoice.date === "2026-02-16")
+  );
+};
+
 const defaultInvoiceRecords = defaultInvoices.map((invoice, index) =>
   normalizeInvoiceRecord(invoice, index)
 );
 
 const getInvoiceKey = (invoice: InvoiceRecord | Invoice) => invoice.id.trim().toLowerCase();
 
-const loadLocalInvoices = () =>
-  loadStoredValue(INVOICES_STORAGE_KEY, defaultInvoiceRecords, (value) => {
+const loadLocalInvoices = () => {
+  const invoices = loadStoredValue(INVOICES_STORAGE_KEY, defaultInvoiceRecords, (value) => {
     if (!Array.isArray(value) || value.length === 0) {
       return defaultInvoiceRecords;
     }
 
     return value.map((invoice, index) => normalizeInvoiceRecord(invoice, index));
   });
+
+  const filteredInvoices = invoices.filter((invoice) => !isLegacySeedInvoice(invoice));
+
+  if (filteredInvoices.length !== invoices.length) {
+    saveStoredValue(INVOICES_STORAGE_KEY, filteredInvoices);
+  }
+
+  return filteredInvoices;
+};
 
 const saveLocalInvoices = (invoices: InvoiceRecord[]) => {
   saveStoredValue(INVOICES_STORAGE_KEY, invoices);

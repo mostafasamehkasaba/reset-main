@@ -25,26 +25,7 @@ export type CreateUserPayload = UserPayload & {
 
 const USERS_STORAGE_KEY = "reset-main-users-v1";
 
-const defaultUsers: AppUser[] = [
-  {
-    id: 1,
-    name: "مدير النظام",
-    email: "admin@example.com",
-    phone: "+968 9000 0001",
-    role: "مدير",
-    status: "نشط",
-    joinedAt: "2026-01-01",
-  },
-  {
-    id: 2,
-    name: "محاسب رئيسي",
-    email: "accountant@example.com",
-    phone: "+968 9000 0002",
-    role: "محاسب",
-    status: "نشط",
-    joinedAt: "2026-01-05",
-  },
-];
+const defaultUsers: AppUser[] = [];
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -180,14 +161,27 @@ const mergeCreatedUser = (user: AppUser, payload: UserPayload): AppUser => ({
 const getUserKey = (user: AppUser) =>
   getFirstText(user.email, `${user.name}-${user.phone}`, String(user.id));
 
-const loadLocalUsers = () =>
-  loadStoredValue(USERS_STORAGE_KEY, defaultUsers, (value) => {
+const LEGACY_SEED_USER_EMAILS = new Set(["admin@example.com", "accountant@example.com"]);
+
+const isLegacySeedUser = (user: AppUser) => LEGACY_SEED_USER_EMAILS.has(user.email);
+
+const loadLocalUsers = () => {
+  const users = loadStoredValue(USERS_STORAGE_KEY, defaultUsers, (value) => {
     if (!Array.isArray(value) || value.length === 0) {
       return defaultUsers;
     }
 
     return value.map((user, index) => normalizeUser(user, index));
   });
+
+  const filteredUsers = users.filter((user) => !isLegacySeedUser(user));
+
+  if (filteredUsers.length !== users.length) {
+    saveStoredValue(USERS_STORAGE_KEY, filteredUsers);
+  }
+
+  return filteredUsers;
+};
 
 const saveLocalUsers = (users: AppUser[]) => {
   saveStoredValue(USERS_STORAGE_KEY, users);
