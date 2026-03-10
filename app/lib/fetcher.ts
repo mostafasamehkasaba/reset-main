@@ -34,6 +34,33 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
 
 const isHtmlDocument = (value: string) => /^<!doctype html/i.test(value) || /^<html/i.test(value);
 
+const containsHtmlDocument = (value: string) =>
+  /<!doctype html/i.test(value) ||
+  /<html[\s>]/i.test(value) ||
+  /<body[\s>]/i.test(value) ||
+  /<head[\s>]/i.test(value);
+
+const normalizeErrorText = (value: unknown) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim();
+  if (!normalized || isHtmlDocument(normalized) || containsHtmlDocument(normalized)) {
+    return null;
+  }
+
+  if (
+    /unexpected token '<'/i.test(normalized) ||
+    /is not valid json/i.test(normalized) ||
+    /unexpected non-whitespace character after json/i.test(normalized)
+  ) {
+    return null;
+  }
+
+  return normalized;
+};
+
 const getMessageFromPayload = (payload: unknown): string | null => {
   if (typeof payload === "string") {
     const normalized = payload.trim();
@@ -93,11 +120,11 @@ export const getErrorMessage = (
   fallback = "حدث خطأ غير متوقع. حاول مرة أخرى."
 ) => {
   if (error instanceof ApiError) {
-    return error.message || fallback;
+    return normalizeErrorText(error.message) || fallback;
   }
 
   if (error instanceof Error) {
-    return error.message || fallback;
+    return normalizeErrorText(error.message) || fallback;
   }
 
   return fallback;
