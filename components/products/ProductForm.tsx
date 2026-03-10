@@ -2,18 +2,16 @@
 
 import type { ChangeEvent, FormEvent, RefObject } from "react";
 import Link from "next/link";
-import { AlertTriangle, ImagePlus, PackageSearch, Sparkles, Tag, X } from "lucide-react";
+import { LoaderCircle, X } from "lucide-react";
 import type { MainCategory, SubCategory } from "@/app/types";
-import { ProductBasicInfo } from "@/components/products/ProductBasicInfo";
-import { ProductDetails } from "@/components/products/ProductDetails";
-import { ProductInventory } from "@/components/products/ProductInventory";
-import { ProductPricing } from "@/components/products/ProductPricing";
 import {
   FALLBACK_PRODUCT_IMAGE,
   IMAGE_INPUT_ACCEPT,
   SUPPORTED_IMAGE_HINT,
   type ProductFormState,
 } from "@/lib/products/productTypes";
+import type { Product, ProductTaxMode, ProductUnit } from "@/app/lib/product-store";
+import { PRODUCT_TAX_MODES } from "@/app/lib/product-store";
 
 type SupplierOption = {
   id: number;
@@ -53,17 +51,36 @@ type ProductFormProps = {
   onImagePreviewError: () => void;
 };
 
-const formatAmount = (value: string, currency: string) => {
-  const numericValue = Number.parseFloat(value);
-  if (!Number.isFinite(numericValue) || numericValue <= 0) {
-    return "-";
-  }
+const containerClassName =
+  "rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6";
+const fieldClassName =
+  "w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:ring-4 focus:ring-sky-100 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
+const labelClassName = "space-y-2";
+const labelTextClassName = "block text-sm font-medium text-slate-700";
+const helperTextClassName = "text-xs text-slate-500";
+const secondaryButtonClassName =
+  "inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70";
+const primaryButtonClassName =
+  "inline-flex items-center justify-center rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70";
 
-  return `${numericValue.toFixed(2)} ${currency}`;
-};
+function Feedback({
+  tone,
+  message,
+}: {
+  tone: "error" | "warning" | "success" | "info";
+  message: string;
+}) {
+  const classes =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "warning"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : tone === "info"
+          ? "border-sky-200 bg-sky-50 text-sky-800"
+          : "border-rose-200 bg-rose-50 text-rose-700";
 
-const summaryCardClassName =
-  "rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.22)]";
+  return <div className={`rounded-xl border px-4 py-3 text-sm ${classes}`}>{message}</div>;
+}
 
 export function ProductForm({
   values,
@@ -96,315 +113,383 @@ export function ProductForm({
 }: ProductFormProps) {
   const isDisabled = isLoading || isSubmitting;
   const isImageActionDisabled = isDisabled || isReadingImage;
-  const selectedMainCategory =
-    mainCategories.find((category) => String(category.id) === values.mainCategoryId) ?? null;
-  const selectedSubCategory =
-    filteredSubCategories.find((category) => String(category.id) === values.subCategoryId) ??
-    null;
-  const resolvedCategory =
-    selectedSubCategory?.name || selectedMainCategory?.name || values.category || "-";
-  const quantity = Math.max(0, Number.parseInt(values.quantity, 10) || 0);
-  const minStockLevel = Math.max(0, Number.parseInt(values.minStockLevel, 10) || 0);
-  const reorderPoint = Math.max(minStockLevel, Number.parseInt(values.reorderPoint, 10) || 0);
   const hasImage = Boolean(values.imageUrl || selectedImageName);
 
-  const stockLabel =
-    quantity <= minStockLevel
-      ? "حرج"
-      : quantity <= reorderPoint
-        ? "تنبيه"
-        : "مستقر";
-
   return (
-    <form
-      onSubmit={onSubmit}
-      className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]"
-      aria-busy={isLoading || isSubmitting}
-    >
-      <div className="space-y-4">
-        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.22)]">
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4">
-            <div>
-              <p className="text-sm font-semibold tracking-[0.18em] text-sky-700">
-                نموذج المنتج
-              </p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-950">
-                {isEditMode ? "تحديث بيانات المنتج الحالية" : "إدخال بيانات المنتج الجديد"}
-              </h2>
-              <p className="mt-2 text-sm leading-7 text-slate-500">
-                نفس الحقول الحالية ستُحفظ بنفس المسار، لكن داخل واجهة أوضح وأسرع في
-                الاستخدام.
-              </p>
-            </div>
-
-            <Link
-              href="/products"
-              className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              رجوع للقائمة
-            </Link>
-          </div>
-
-          {isLoading ? (
-            <div className="mt-4 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
-              جاري تجهيز بيانات المنتج وربط المراجع الحالية...
-            </div>
-          ) : null}
-
-          {loadError ? (
-            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {loadError}
-            </div>
-          ) : null}
-
-          {referenceError ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              {referenceError}
-            </div>
-          ) : null}
-
-          {validationMessage ? (
-            <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-              {validationMessage}
-            </div>
-          ) : null}
-
-          {saveMessage ? (
-            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              {saveMessage}
-            </div>
-          ) : null}
-        </section>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          <ProductBasicInfo
-            values={values}
-            mainCategories={mainCategories}
-            filteredSubCategories={filteredSubCategories}
-            supplierOptions={supplierOptions}
-            isDisabled={isDisabled}
-            onFieldChange={onFieldChange}
-            onNameChange={onNameChange}
-            onCodeChange={onCodeChange}
-            onGenerateCode={onGenerateCode}
-            onGenerateBarcode={onGenerateBarcode}
-            onMainCategoryChange={onMainCategoryChange}
-            onSubCategoryChange={onSubCategoryChange}
-          />
-
-          <ProductPricing
-            values={values}
-            isDisabled={isDisabled}
-            onFieldChange={onFieldChange}
-          />
+    <form onSubmit={onSubmit} className={containerClassName} aria-busy={isLoading || isSubmitting}>
+      <div className="border-b border-slate-200 pb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">
+            {isEditMode ? "تعديل المنتج" : "إضافة منتج"}
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">كل البيانات في نموذج واحد بسيط.</p>
         </div>
-
-        <div className="grid gap-4 xl:grid-cols-2">
-          <ProductDetails
-            values={values}
-            unitOptions={unitOptions}
-            isDisabled={isDisabled}
-            onFieldChange={onFieldChange}
-          />
-
-          <ProductInventory
-            values={values}
-            isDisabled={isDisabled}
-            onFieldChange={onFieldChange}
-          />
-        </div>
-
-        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.22)]">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm leading-7 text-slate-500">
-              {isEditMode
-                ? "سيتم حفظ التعديلات على نفس المنتج الحالي بنفس منطق التحديث الموجود."
-                : "سيتم إنشاء المنتج بنفس عقد الباكند الحالي دون أي تغيير في الحقول أو المسارات."}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <Link
-                href="/products"
-                className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-              >
-                إلغاء
-              </Link>
-              <button
-                type="submit"
-                disabled={isDisabled}
-                className="rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {isSubmitting
-                  ? isEditMode
-                    ? "جارٍ حفظ التعديلات..."
-                    : "جارٍ حفظ المنتج..."
-                  : isEditMode
-                    ? "حفظ التعديلات"
-                    : "حفظ المنتج"}
-              </button>
-            </div>
-          </div>
-        </section>
       </div>
 
-      <aside className="space-y-4">
-        <section className={summaryCardClassName}>
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-              <ImagePlus className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold tracking-[0.18em] text-slate-700">
-                صورة المنتج
-              </p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-950">
-                معاينة ورفع الصورة
-              </h2>
-            </div>
-          </div>
+      <div className="mt-4 space-y-3">
+        {isLoading ? <Feedback tone="info" message="جاري تجهيز بيانات المنتج..." /> : null}
+        {loadError ? <Feedback tone="error" message={loadError} /> : null}
+        {referenceError ? <Feedback tone="warning" message={referenceError} /> : null}
+        {validationMessage ? <Feedback tone="error" message={validationMessage} /> : null}
+        {saveMessage ? <Feedback tone="success" message={saveMessage} /> : null}
+      </div>
 
-          <div className="mt-5 flex h-64 items-center justify-center overflow-hidden rounded-[24px] border border-dashed border-slate-200 bg-slate-50 p-4">
-            <img
-              src={values.imageUrl || FALLBACK_PRODUCT_IMAGE}
-              alt="صورة المنتج"
-              className="max-h-full max-w-full object-contain"
-              onError={(event) => {
-                event.currentTarget.onerror = null;
-                event.currentTarget.src = FALLBACK_PRODUCT_IMAGE;
-                onImagePreviewError();
-              }}
-            />
-          </div>
-
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <label className={`${labelClassName} md:col-span-2`}>
+          <span className={labelTextClassName}>
+            اسم المنتج <span className="text-rose-500">*</span>
+          </span>
           <input
-            ref={fileInputRef}
-            type="file"
-            accept={IMAGE_INPUT_ACCEPT}
-            className="hidden"
-            onChange={onImageChange}
-            disabled={isImageActionDisabled}
+            value={values.name}
+            onChange={(event) => onNameChange(event.target.value)}
+            className={fieldClassName}
+            placeholder="مثال: قالب ووردبريس"
+            required
+            disabled={isDisabled}
           />
+        </label>
 
-          <div className="mt-4 space-y-3">
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>
+            كود المنتج <span className="text-rose-500">*</span>
+          </span>
+          <div className="flex gap-2">
+            <input
+              value={values.code}
+              onChange={(event) => onCodeChange(event.target.value)}
+              className={`${fieldClassName} flex-1`}
+              required
+              disabled={isDisabled}
+            />
             <button
               type="button"
-              onClick={onImageButtonClick}
-              disabled={isImageActionDisabled}
-              className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
+              onClick={onGenerateCode}
+              className={secondaryButtonClassName}
+              disabled={isDisabled}
             >
-              {selectedImageName ? "تغيير صورة المنتج" : "رفع صورة المنتج"}
+              توليد
             </button>
+          </div>
+        </label>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-6 text-slate-500">
-              {selectedImageName || SUPPORTED_IMAGE_HINT}
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>الباركود</span>
+          <div className="flex gap-2">
+            <input
+              value={values.barcode}
+              onChange={(event) => onFieldChange("barcode", event.target.value)}
+              className={`${fieldClassName} flex-1`}
+              placeholder="مثال: 6281000010012"
+              disabled={isDisabled}
+            />
+            <button
+              type="button"
+              onClick={onGenerateBarcode}
+              className={secondaryButtonClassName}
+              disabled={isDisabled}
+            >
+              توليد
+            </button>
+          </div>
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>التصنيف الرئيسي</span>
+          <select
+            value={values.mainCategoryId}
+            onChange={(event) => onMainCategoryChange(event.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled}
+          >
+            <option value="">اختر التصنيف الرئيسي</option>
+            {mainCategories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>التصنيف الفرعي</span>
+          <select
+            value={values.subCategoryId}
+            onChange={(event) => onSubCategoryChange(event.target.value)}
+            className={fieldClassName}
+            disabled={!values.mainCategoryId || isDisabled}
+          >
+            <option value="">اختر التصنيف الفرعي</option>
+            {filteredSubCategories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>المورد</span>
+          <select
+            value={values.supplierName}
+            onChange={(event) => onFieldChange("supplierName", event.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled}
+          >
+            <option value="">اختر المورد</option>
+            {supplierOptions.map((supplier) => (
+              <option key={supplier.id} value={supplier.name}>
+                {supplier.name}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>وحدة القياس</span>
+          <select
+            value={values.unit}
+            onChange={(event) => onFieldChange("unit", event.target.value as ProductUnit)}
+            className={fieldClassName}
+            disabled={isDisabled}
+          >
+            {unitOptions.map((unit) => (
+              <option key={unit} value={unit}>
+                {unit}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>الحالة</span>
+          <select
+            value={values.status}
+            onChange={(event) =>
+              onFieldChange("status", event.target.value as Product["status"])
+            }
+            className={fieldClassName}
+            disabled={isDisabled}
+          >
+            <option value="متاح">متاح</option>
+            <option value="غير متاح">غير متاح</option>
+          </select>
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>العملة</span>
+          <input
+            value={values.currency}
+            onChange={(event) => onFieldChange("currency", event.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled}
+          />
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>سعر البيع</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={values.sellingPrice}
+            onChange={(event) => onFieldChange("sellingPrice", event.target.value)}
+            className={fieldClassName}
+            placeholder="0.00"
+            disabled={isDisabled}
+          />
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>سعر الشراء</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={values.purchasePrice}
+            onChange={(event) => onFieldChange("purchasePrice", event.target.value)}
+            className={fieldClassName}
+            placeholder="0.00"
+            disabled={isDisabled}
+          />
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>نوع الضريبة</span>
+          <select
+            value={values.taxMode}
+            onChange={(event) =>
+              onFieldChange("taxMode", event.target.value as ProductTaxMode)
+            }
+            className={fieldClassName}
+            disabled={isDisabled}
+          >
+            {PRODUCT_TAX_MODES.map((mode) => (
+              <option key={mode.value} value={mode.value}>
+                {mode.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>نسبة الضريبة %</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={values.defaultTaxRate}
+            onChange={(event) => onFieldChange("defaultTaxRate", event.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled || values.taxMode === "none"}
+          />
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>الكمية</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={values.quantity}
+            onChange={(event) => onFieldChange("quantity", event.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled}
+          />
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>الحد الأدنى للمخزون</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={values.minStockLevel}
+            onChange={(event) => onFieldChange("minStockLevel", event.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled}
+          />
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>حد إعادة الطلب</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={values.reorderPoint}
+            onChange={(event) => onFieldChange("reorderPoint", event.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled}
+          />
+        </label>
+
+        <label className={labelClassName}>
+          <span className={labelTextClassName}>تاريخ الإضافة</span>
+          <input
+            type="date"
+            value={values.dateAdded}
+            onChange={(event) => onFieldChange("dateAdded", event.target.value)}
+            className={fieldClassName}
+            disabled={isDisabled}
+          />
+        </label>
+
+        <label className={`${labelClassName} md:col-span-2`}>
+          <span className={labelTextClassName}>الوصف</span>
+          <textarea
+            rows={4}
+            value={values.description}
+            onChange={(event) => onFieldChange("description", event.target.value)}
+            className={fieldClassName}
+            placeholder="وصف اختياري"
+            disabled={isDisabled}
+          />
+        </label>
+
+        <div className="space-y-3 md:col-span-2">
+          <div>
+            <span className={labelTextClassName}>صورة المنتج</span>
+            <p className={`mt-1 ${helperTextClassName}`}>{selectedImageName || SUPPORTED_IMAGE_HINT}</p>
+          </div>
+
+          <div className="flex flex-col gap-4 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-start">
+            <div className="flex h-28 w-full items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 sm:w-32">
+              <img
+                src={values.imageUrl || FALLBACK_PRODUCT_IMAGE}
+                alt="صورة المنتج"
+                className="max-h-full max-w-full object-contain"
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = FALLBACK_PRODUCT_IMAGE;
+                  onImagePreviewError();
+                }}
+              />
             </div>
 
-            {hasImage ? (
-              <button
-                type="button"
-                onClick={onRemoveImage}
+            <div className="flex-1 space-y-3">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={IMAGE_INPUT_ACCEPT}
+                className="hidden"
+                onChange={onImageChange}
                 disabled={isImageActionDisabled}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                <X className="h-4 w-4" />
-                إزالة الصورة
-              </button>
-            ) : null}
-          </div>
-        </section>
+              />
 
-        <section className={summaryCardClassName}>
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-50 text-sky-700">
-              <PackageSearch className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold tracking-[0.18em] text-sky-700">
-                ملخص سريع
-              </p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-950">
-                نظرة سريعة قبل الحفظ
-              </h2>
-            </div>
-          </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={onImageButtonClick}
+                  disabled={isImageActionDisabled}
+                  className={secondaryButtonClassName}
+                >
+                  {isReadingImage ? (
+                    <span className="inline-flex items-center gap-2">
+                      <LoaderCircle className="h-4 w-4 animate-spin" />
+                      جاري القراءة...
+                    </span>
+                  ) : selectedImageName ? (
+                    "تغيير الصورة"
+                  ) : (
+                    "رفع صورة"
+                  )}
+                </button>
 
-          <div className="mt-5 space-y-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-              <p className="text-xs text-slate-400">اسم المنتج</p>
-              <p className="mt-1 text-sm font-medium text-slate-900">
-                {values.name || "-"}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-              <p className="text-xs text-slate-400">الكود والتصنيف</p>
-              <p className="mt-1 text-sm font-medium text-slate-900">
-                {values.code || "-"}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">{resolvedCategory}</p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-                <p className="text-xs text-slate-400">سعر البيع</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  {formatAmount(values.sellingPrice, values.currency)}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-                <p className="text-xs text-slate-400">سعر الشراء</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  {formatAmount(values.purchasePrice, values.currency)}
-                </p>
+                {hasImage ? (
+                  <button
+                    type="button"
+                    onClick={onRemoveImage}
+                    disabled={isImageActionDisabled}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-sm font-medium text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    <X className="h-4 w-4" />
+                    إزالة
+                  </button>
+                ) : null}
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-                <p className="text-xs text-slate-400">الحالة</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  {values.status || "-"}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-                <p className="text-xs text-slate-400">حالة المخزون</p>
-                <p className="mt-1 text-sm font-medium text-slate-900">{stockLabel}</p>
-              </div>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-              <p className="text-xs text-slate-400">المورد</p>
-              <p className="mt-1 text-sm font-medium text-slate-900">
-                {values.supplierName || "-"}
-              </p>
-            </div>
           </div>
-        </section>
+        </div>
+      </div>
 
-        <section className={summaryCardClassName}>
-          <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold tracking-[0.18em] text-amber-700">
-                إرشادات
-              </p>
-              <h2 className="mt-2 text-xl font-semibold text-slate-950">
-                نقاط سريعة قبل الحفظ
-              </h2>
-            </div>
-          </div>
+      <div className="mt-6 flex flex-wrap gap-2 border-t border-slate-200 pt-4">
+        <button type="submit" disabled={isDisabled} className={primaryButtonClassName}>
+          {isSubmitting ? (
+            <span className="inline-flex items-center gap-2">
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              {isEditMode ? "جارٍ الحفظ..." : "جارٍ الإنشاء..."}
+            </span>
+          ) : isEditMode ? (
+            "حفظ التعديلات"
+          ) : (
+            "حفظ المنتج"
+          )}
+        </button>
 
-          <div className="mt-5 space-y-3 text-sm leading-7 text-slate-600">
-            <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-              <Tag className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-              سيُستخدم التصنيف الفرعي إن وُجد، وإلا سيُستخدم التصنيف الرئيسي كما هو معمول به
-              حاليًا.
-            </div>
-            <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-              قيم المخزون والضريبة ستُرسل بنفس البنية الحالية دون إعادة تشكيل للبيانات.
-            </div>
-          </div>
-        </section>
-      </aside>
+        <Link href="/products" className={secondaryButtonClassName}>
+          رجوع
+        </Link>
+      </div>
     </form>
   );
 }

@@ -101,10 +101,13 @@ export function InvoiceCustomer({
 
         <Field label="الهاتف" icon={<Phone className="h-4 w-4" />}>
           <input
+            type="tel"
+            inputMode="tel"
+            dir="rtl"
             value={customer.phone}
             onChange={(event) => onChange("phone", event.target.value)}
             placeholder="+966 ..."
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-right text-sm text-slate-700 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
           />
         </Field>
       </div>

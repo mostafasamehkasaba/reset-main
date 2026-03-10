@@ -42,9 +42,11 @@ export function SupplierContactInfo({
           </span>
           <input
             type="tel"
+            inputMode="tel"
+            dir="rtl"
             value={values.phone}
             onChange={(event) => onChange("phone", event.target.value)}
-            className={fieldClassName}
+            className={`${fieldClassName} text-right`}
             placeholder="مثال: 01000000000"
             disabled={isDisabled}
             required

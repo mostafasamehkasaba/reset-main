@@ -36,6 +36,15 @@ body {
   font-family: var(--font-sans), "Segoe UI", Tahoma, sans-serif;
 }
 
+input[type="tel"] {
+  direction: rtl;
+  text-align: right;
+}
+
+input[type="tel"]::placeholder {
+  text-align: right;
+}
+
 :root:not([data-theme]) body,
 :root[data-theme="light"] body {
   background:

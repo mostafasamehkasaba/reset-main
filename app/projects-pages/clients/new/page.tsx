@@ -1,8 +1,22 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  Building2,
+  CreditCard,
+  FileText,
+  Globe2,
+  Landmark,
+  LoaderCircle,
+  Mail,
+  MapPin,
+  Phone,
+  ReceiptText,
+  UserRound,
+  Wallet,
+} from "lucide-react";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import {
@@ -59,6 +73,9 @@ const initialFormState: ClientFormState = {
   notes: "",
 };
 
+const fieldClassName =
+  "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white focus:shadow-[0_0_0_4px_rgba(56,189,248,0.12)] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
+
 const normalizeCountrySelection = (value: string | undefined): CountryApiValue => {
   if (!value) {
     return defaultCountry;
@@ -100,8 +117,55 @@ const mapClientToFormState = (client: Client): ClientFormState => ({
   notes: client.internalNotes === "-" || !client.internalNotes ? "" : client.internalNotes,
 });
 
+const getClientTypeLabel = (value: ClientType) => (value === "company" ? "شركة" : "فرد");
+
+function SectionCard({
+  title,
+  description,
+  icon,
+  children,
+  className = "",
+}: {
+  title: string;
+  description: string;
+  icon: ReactNode;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm ${className}`}>
+      <div className="flex items-start gap-3 border-b border-slate-200 pb-4">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-50 text-slate-700">
+          {icon}
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-500">{description}</p>
+        </div>
+      </div>
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function Feedback({
+  tone,
+  message,
+}: {
+  tone: "error" | "success" | "info";
+  message: string;
+}) {
+  const classes =
+    tone === "success"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "info"
+        ? "border-sky-200 bg-sky-50 text-sky-800"
+        : "border-rose-200 bg-rose-50 text-rose-700";
+
+  return <div className={`rounded-2xl border px-4 py-3 text-sm ${classes}`}>{message}</div>;
+}
+
 function ClientFormPageInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const clientId = Number(searchParams.get("id"));
   const isEditMode = Number.isFinite(clientId) && clientId > 0;
@@ -117,9 +181,22 @@ function ClientFormPageInner() {
     [isEditMode]
   );
 
+  const pageDescription = useMemo(
+    () =>
+      isEditMode
+        ? "حدّث بيانات العميل الحالية مع الحفاظ على نفس منطق الحفظ."
+        : "أضف عميلًا جديدًا داخل نموذج منظم وواضح.",
+    [isEditMode]
+  );
+
   const submitLabel = useMemo(
-    () => (isSubmitting ? "جارٍ الحفظ..." : isEditMode ? "حفظ التعديلات" : "حفظ"),
+    () => (isSubmitting ? "جارٍ الحفظ..." : isEditMode ? "حفظ التعديلات" : "حفظ العميل"),
     [isEditMode, isSubmitting]
+  );
+
+  const selectedPaymentMethodLabel = useMemo(
+    () => paymentMethods.find((item) => item.value === form.paymentMethod)?.label ?? "نقدي",
+    [form.paymentMethod]
   );
 
   const updateField = <K extends keyof ClientFormState>(
@@ -144,10 +221,7 @@ function ClientFormPageInner() {
 
       try {
         const client = await getClient(clientId);
-
-        if (!active) {
-          return;
-        }
+        if (!active) return;
 
         if (!client) {
           setErrorMessage("تعذر العثور على بيانات العميل.");
@@ -156,10 +230,7 @@ function ClientFormPageInner() {
 
         setForm(mapClientToFormState(client));
       } catch (error) {
-        if (!active) {
-          return;
-        }
-
+        if (!active) return;
         setErrorMessage(getErrorMessage(error, "تعذر تحميل بيانات العميل."));
       } finally {
         if (active) {
@@ -228,224 +299,269 @@ function ClientFormPageInner() {
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
-          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">{pageTitle}</div>
-            <button
-              type="button"
-              onClick={() => router.push("/customers")}
-              className="rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-600"
-            >
-              رجوع
-            </button>
-          </div>
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold tracking-[0.18em] text-sky-700">العملاء</p>
+                <h1 className="mt-2 text-2xl font-semibold text-slate-950">{pageTitle}</h1>
+                <p className="mt-2 text-sm text-slate-500">{pageDescription}</p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
+                  {getClientTypeLabel(form.clientType)}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
+                  {form.country}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
+                  {selectedPaymentMethodLabel}
+                </span>
+                <Link
+                  href="/customers"
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  رجوع
+                </Link>
+              </div>
+            </div>
+          </section>
 
           {isLoadingClient ? (
-            <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-700">
-              جارٍ تحميل بيانات العميل...
-            </div>
+            <Feedback tone="info" message="جارٍ تحميل بيانات العميل..." />
           ) : null}
 
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <section className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <h2 className="text-sm font-bold text-slate-800">معلومات أساسية</h2>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الاسم *</label>
-                  <input
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    value={form.name}
-                    onChange={(event) => updateField("name", event.target.value)}
-                    disabled={isLoadingClient || isSubmitting}
-                    required
-                  />
-                </div>
+          {saveMessage ? <Feedback tone="success" message={saveMessage} /> : null}
+          {errorMessage ? <Feedback tone="error" message={errorMessage} /> : null}
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">نوع العميل</label>
-                  <select
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                    value={form.clientType}
-                    onChange={(event) =>
-                      updateField("clientType", event.target.value as ClientType)
-                    }
-                    disabled={isLoadingClient || isSubmitting}
-                  >
-                    <option value="individual">فرد</option>
-                    <option value="company">شركة</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الهاتف</label>
-                  <input
-                    type="tel"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    value={form.phone}
-                    onChange={(event) => updateField("phone", event.target.value)}
-                    disabled={isLoadingClient || isSubmitting}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">البريد</label>
-                  <input
-                    type="email"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    value={form.email}
-                    onChange={(event) => updateField("email", event.target.value)}
-                    disabled={isLoadingClient || isSubmitting}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الدولة</label>
-                  <select
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                    value={form.country}
-                    onChange={(event) =>
-                      updateField("country", event.target.value as CountryApiValue)
-                    }
-                    disabled={isLoadingClient || isSubmitting}
-                  >
-                    {countryOptions.map((country) => (
-                      <option key={country.value} value={country.value}>
-                        {country.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2 lg:col-span-2">
-                  <label className="text-sm font-semibold text-slate-700">العنوان</label>
-                  <textarea
-                    rows={3}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    value={form.address}
-                    onChange={(event) => updateField("address", event.target.value)}
-                    disabled={isLoadingClient || isSubmitting}
-                  />
-                </div>
-              </div>
-            </section>
-
-            <section className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <h2 className="text-sm font-bold text-slate-800">معلومات مالية</h2>
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الرقم الضريبي</label>
-                  <input
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    value={form.taxNumber}
-                    onChange={(event) => updateField("taxNumber", event.target.value)}
-                    disabled={isLoadingClient || isSubmitting}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">السجل التجاري</label>
-                  <input
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    value={form.commercialRegister}
-                    onChange={(event) =>
-                      updateField("commercialRegister", event.target.value)
-                    }
-                    disabled={isLoadingClient || isSubmitting}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الحد الائتماني</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    value={form.creditLimit}
-                    onChange={(event) => updateField("creditLimit", event.target.value)}
-                    disabled={isLoadingClient || isSubmitting}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    الرصيد الافتتاحي
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+              <SectionCard
+                title="معلومات أساسية"
+                description="بيانات التواصل والتعريف الأساسية للعميل."
+                icon={<UserRound className="h-5 w-5" />}
+                className="h-full"
+              >
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2 md:col-span-2">
+                    <span className="text-sm font-semibold text-slate-700">الاسم *</span>
+                    <input
+                      className={fieldClassName}
+                      value={form.name}
+                      onChange={(event) => updateField("name", event.target.value)}
+                      disabled={isLoadingClient || isSubmitting}
+                      required
+                    />
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    value={form.openingBalance}
-                    onChange={(event) => updateField("openingBalance", event.target.value)}
-                    disabled={isLoadingClient || isSubmitting}
-                  />
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    طريقة الدفع الافتراضية
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <Building2 className="h-4 w-4 text-slate-400" />
+                      نوع العميل
+                    </span>
+                    <select
+                      className={fieldClassName}
+                      value={form.clientType}
+                      onChange={(event) =>
+                        updateField("clientType", event.target.value as ClientType)
+                      }
+                      disabled={isLoadingClient || isSubmitting}
+                    >
+                      <option value="individual">فرد</option>
+                      <option value="company">شركة</option>
+                    </select>
                   </label>
-                  <select
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                    value={form.paymentMethod}
-                    onChange={(event) =>
-                      updateField("paymentMethod", event.target.value as ClientPaymentMethod)
-                    }
-                    disabled={isLoadingClient || isSubmitting}
-                  >
-                    {paymentMethods.map((paymentMethod) => (
-                      <option key={paymentMethod.value} value={paymentMethod.value}>
-                        {paymentMethod.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </section>
 
-            <section className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <h2 className="text-sm font-bold text-slate-800">إضافي</h2>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">ملاحظات</label>
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <Phone className="h-4 w-4 text-slate-400" />
+                      الهاتف
+                    </span>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      dir="rtl"
+                      className={`${fieldClassName} text-right`}
+                      value={form.phone}
+                      onChange={(event) => updateField("phone", event.target.value)}
+                      disabled={isLoadingClient || isSubmitting}
+                      required
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <Mail className="h-4 w-4 text-slate-400" />
+                      البريد الإلكتروني
+                    </span>
+                    <input
+                      type="email"
+                      className={fieldClassName}
+                      value={form.email}
+                      onChange={(event) => updateField("email", event.target.value)}
+                      disabled={isLoadingClient || isSubmitting}
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <Globe2 className="h-4 w-4 text-slate-400" />
+                      الدولة
+                    </span>
+                    <select
+                      className={fieldClassName}
+                      value={form.country}
+                      onChange={(event) =>
+                        updateField("country", event.target.value as CountryApiValue)
+                      }
+                      disabled={isLoadingClient || isSubmitting}
+                    >
+                      {countryOptions.map((country) => (
+                        <option key={country.value} value={country.value}>
+                          {country.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-2 md:col-span-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <MapPin className="h-4 w-4 text-slate-400" />
+                      العنوان
+                    </span>
+                    <textarea
+                      rows={4}
+                      className={fieldClassName}
+                      value={form.address}
+                      onChange={(event) => updateField("address", event.target.value)}
+                      disabled={isLoadingClient || isSubmitting}
+                    />
+                  </label>
+                </div>
+              </SectionCard>
+
+              <SectionCard
+                title="الفوترة والائتمان"
+                description="البيانات المالية الافتراضية المستخدمة مع العميل."
+                icon={<Wallet className="h-5 w-5" />}
+                className="h-full"
+              >
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <ReceiptText className="h-4 w-4 text-slate-400" />
+                      الرقم الضريبي
+                    </span>
+                    <input
+                      className={fieldClassName}
+                      value={form.taxNumber}
+                      onChange={(event) => updateField("taxNumber", event.target.value)}
+                      disabled={isLoadingClient || isSubmitting}
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <Landmark className="h-4 w-4 text-slate-400" />
+                      السجل التجاري
+                    </span>
+                    <input
+                      className={fieldClassName}
+                      value={form.commercialRegister}
+                      onChange={(event) =>
+                        updateField("commercialRegister", event.target.value)
+                      }
+                      disabled={isLoadingClient || isSubmitting}
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <Wallet className="h-4 w-4 text-slate-400" />
+                      الحد الائتماني
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className={fieldClassName}
+                      value={form.creditLimit}
+                      onChange={(event) => updateField("creditLimit", event.target.value)}
+                      disabled={isLoadingClient || isSubmitting}
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <CreditCard className="h-4 w-4 text-slate-400" />
+                      الرصيد الافتتاحي
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className={fieldClassName}
+                      value={form.openingBalance}
+                      onChange={(event) => updateField("openingBalance", event.target.value)}
+                      disabled={isLoadingClient || isSubmitting}
+                    />
+                  </label>
+
+                  <label className="space-y-2 md:col-span-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <CreditCard className="h-4 w-4 text-slate-400" />
+                      طريقة الدفع الافتراضية
+                    </span>
+                    <select
+                      className={fieldClassName}
+                      value={form.paymentMethod}
+                      onChange={(event) =>
+                        updateField("paymentMethod", event.target.value as ClientPaymentMethod)
+                      }
+                      disabled={isLoadingClient || isSubmitting}
+                    >
+                      {paymentMethods.map((paymentMethod) => (
+                        <option key={paymentMethod.value} value={paymentMethod.value}>
+                          {paymentMethod.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </SectionCard>
+            </div>
+
+            <SectionCard
+              title="ملاحظات إضافية"
+              description="أي معلومات داخلية تساعد فريقك على التعامل مع العميل."
+              icon={<FileText className="h-5 w-5" />}
+            >
+              <label className="space-y-2">
+                <span className="text-sm font-semibold text-slate-700">ملاحظات</span>
                 <textarea
-                  rows={4}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                  rows={5}
+                  className={fieldClassName}
                   value={form.notes}
                   onChange={(event) => updateField("notes", event.target.value)}
                   disabled={isLoadingClient || isSubmitting}
                 />
-              </div>
-            </section>
+              </label>
+            </SectionCard>
 
-            {saveMessage ? (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                {saveMessage}
-              </div>
-            ) : null}
-
-            {errorMessage ? (
-              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                {errorMessage}
-              </div>
-            ) : null}
-
-            <div className="flex items-center justify-between">
-              <button
-                type="submit"
-                disabled={isLoadingClient || isSubmitting}
-                className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {submitLabel}
-              </button>
+            <div className="flex flex-wrap items-center justify-end gap-3 rounded-[28px] border border-slate-200 bg-white px-5 py-4 shadow-sm">
               <Link
                 href="/customers"
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600"
+                className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
               >
                 إلغاء
               </Link>
+              <button
+                type="submit"
+                disabled={isLoadingClient || isSubmitting}
+                className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+                {submitLabel}
+              </button>
             </div>
           </form>
         </main>

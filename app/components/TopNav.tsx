@@ -59,7 +59,7 @@ const quickActions = [
 export default function TopNav({
   currentLabel,
   parentLabel = "مساحة العمل",
-  actionLabel = "إضافة",
+  actionLabel = "إجراء سريع",
   searchPlaceholder = "ابحث بسرعة عن العملاء أو الفواتير أو المنتجات...",
 }: TopNavProps) {
   const [actionsOpen, setActionsOpen] = useState(false);

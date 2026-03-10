@@ -446,17 +446,12 @@ export default function NewProductPage() {
         dir="ltr"
       >
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
-          <section className="rounded-[32px] border border-slate-200 bg-white px-5 py-6 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.3)] sm:px-6">
-            <p className="text-sm font-semibold tracking-[0.18em] text-sky-700">المنتجات</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+          <div className="px-1">
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
               {isEditMode ? "تعديل المنتج" : "إضافة منتج جديد"}
             </h1>
-            <p className="mt-3 text-sm leading-7 text-slate-500 sm:text-base">
-              أعيد تنظيم النموذج إلى سكاشن أوضح وأسرع في المسح البصري، مع الحفاظ على نفس
-              حقول الباكند، ونفس آلية الحفظ، ونفس علاقات المنتج مع التصنيفات والموردين
-              والمخزون.
-            </p>
-          </section>
+            <p className="mt-1 text-sm text-slate-500">صفحة بسيطة لإدخال بيانات المنتج فقط.</p>
+          </div>
 
           <ProductForm
             values={form}

@@ -143,7 +143,9 @@ export default function NewSupplierPage() {
                   <label className="text-sm font-semibold text-slate-700">الهاتف *</label>
                   <input
                     type="tel"
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
+                    inputMode="tel"
+                    dir="rtl"
+                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-right text-sm"
                     value={form.phone}
                     onChange={(event) => updateField("phone", event.target.value)}
                     required
