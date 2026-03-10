@@ -6,7 +6,7 @@ import {
   type SupplierStatusApiValue,
   toSupplierStatusApiValue,
 } from "../lib/api-lookups";
-import { apiRequest } from "../lib/fetcher";
+import { ApiError, apiRequest } from "../lib/fetcher";
 import {
   getNextNumericId,
   isRecoverableApiError,
@@ -200,6 +200,39 @@ const createLocalSupplier = (supplier: SupplierPayload) => {
   return createdSupplier;
 };
 
+const buildSupplierDraft = (supplier: SupplierPayload) => ({
+  ...buildRequestBody(supplier),
+  balance: supplier.openingBalance,
+  orders: 0,
+  joined_at: new Date().toISOString().slice(0, 10),
+});
+
+const updateLocalSupplier = (supplierId: number, supplier: SupplierPayload) => {
+  const suppliers = loadSuppliersFromStorage();
+  const existingSupplier = suppliers.find((entry) => entry.id === supplierId);
+  const nextSupplier = normalizeSupplier(
+    {
+      ...(existingSupplier || {}),
+      ...buildSupplierDraft(supplier),
+      id: supplierId,
+      joined_at: existingSupplier?.joinedAt || new Date().toISOString().slice(0, 10),
+      balance: existingSupplier?.balance ?? supplier.openingBalance,
+      orders: existingSupplier?.orders ?? 0,
+    },
+    0
+  );
+
+  if (!existingSupplier) {
+    saveSuppliersToStorage(upsertByKey(suppliers, nextSupplier, getSupplierKey));
+    return nextSupplier;
+  }
+
+  saveSuppliersToStorage(
+    suppliers.map((entry) => (entry.id === supplierId ? nextSupplier : entry))
+  );
+  return nextSupplier;
+};
+
 const removeLocalSupplier = (supplierId: number) => {
   const suppliers = loadSuppliersFromStorage();
   saveSuppliersToStorage(suppliers.filter((supplier) => supplier.id !== supplierId));
@@ -228,6 +261,36 @@ export const listSuppliers = async () => {
   }
 };
 
+export const getSupplier = async (supplierId: number) => {
+  try {
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>(`/api/suppliers/${supplierId}`, {
+      ...(token ? { token } : {}),
+    });
+    const record = asRecord(payload);
+    const supplier = normalizeSupplier(record?.data || record?.supplier || payload, 0);
+    persistSupplier(supplier);
+    return supplier;
+  } catch (error) {
+    if (
+      (error instanceof ApiError && (error.status === 404 || error.status === 405)) ||
+      isRecoverableApiError(error)
+    ) {
+      const localSupplier = loadSuppliersFromStorage().find(
+        (supplier) => supplier.id === supplierId
+      );
+      if (localSupplier) {
+        return localSupplier;
+      }
+
+      const suppliers = await listSuppliers();
+      return suppliers.find((supplier) => supplier.id === supplierId) ?? null;
+    }
+
+    throw error;
+  }
+};
+
 export const createSupplier = async (supplier: SupplierPayload) => {
   try {
     const token = getStoredAuthToken();
@@ -243,6 +306,30 @@ export const createSupplier = async (supplier: SupplierPayload) => {
   } catch (error) {
     if (isRecoverableApiError(error)) {
       return createLocalSupplier(supplier);
+    }
+
+    throw error;
+  }
+};
+
+export const updateSupplier = async (supplierId: number, supplier: SupplierPayload) => {
+  try {
+    const token = getStoredAuthToken();
+    const payload = await apiRequest<unknown>(`/api/suppliers/${supplierId}`, {
+      method: "PUT",
+      ...(token ? { token } : {}),
+      body: JSON.stringify(buildRequestBody(supplier)),
+    });
+
+    const updatedSupplier = extractSingleSupplier(payload, supplier);
+    persistSupplier(updatedSupplier);
+    return updatedSupplier;
+  } catch (error) {
+    if (
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && (error.status === 404 || error.status === 405))
+    ) {
+      return updateLocalSupplier(supplierId, supplier);
     }
 
     throw error;

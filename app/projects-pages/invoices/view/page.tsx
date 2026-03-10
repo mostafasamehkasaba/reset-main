@@ -1,18 +1,44 @@
-"use client";
+﻿"use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
+import { InvoiceDocument } from "../../../components/invoices/InvoiceDocument";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import { getErrorMessage } from "../../../lib/fetcher";
-import { listInvoices } from "../../../services/invoices";
-import type { Invoice } from "../../../types";
+import { getInvoiceDetails, type InvoiceDetails } from "../../../services/invoices";
+import { emptySettings, getSettings, type AppSettings } from "../../../services/settings";
+
+function ViewInvoiceLoadingState() {
+  return (
+    <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_-32px_rgba(15,23,42,0.18)]">
+      <div className="animate-pulse space-y-4">
+        <div className="h-40 rounded-[24px] bg-slate-100" />
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="h-36 rounded-[20px] bg-slate-100" />
+          <div className="h-36 rounded-[20px] bg-slate-100" />
+        </div>
+        <div className="h-72 rounded-[24px] bg-slate-100" />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="h-40 rounded-[20px] bg-slate-100" />
+            <div className="h-40 rounded-[20px] bg-slate-100" />
+          </div>
+          <div className="h-48 rounded-[20px] bg-slate-100" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ViewInvoicePageContent() {
   const searchParams = useSearchParams();
   const invoiceIdParam = searchParams.get("id");
 
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [invoice, setInvoice] = useState<InvoiceDetails | null>(null);
+  const [companySettings, setCompanySettings] = useState<AppSettings>(emptySettings);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -30,130 +56,82 @@ function ViewInvoicePageContent() {
       setErrorMessage("");
 
       try {
-        const data = await listInvoices();
+        const [data, settings] = await Promise.all([
+          getInvoiceDetails(invoiceIdParam),
+          getSettings().catch(() => emptySettings),
+        ]);
         if (!active) return;
-        const selected = data.find((entry) => entry.id === invoiceIdParam) ?? null;
-        if (!selected) {
+
+        setCompanySettings(settings);
+
+        if (!data) {
+          setInvoice(null);
           setErrorMessage("تعذر العثور على الفاتورة المطلوبة.");
+          return;
         }
-        setInvoice(selected);
+
+        setInvoice(data);
       } catch (error) {
         if (!active) return;
+        setInvoice(null);
+        setCompanySettings(emptySettings);
         setErrorMessage(getErrorMessage(error, "تعذر تحميل بيانات الفاتورة."));
       } finally {
-        if (active) setIsLoading(false);
+        if (active) {
+          setIsLoading(false);
+        }
       }
     };
 
-    loadData();
+    void loadData();
     return () => {
       active = false;
     };
   }, [invoiceIdParam]);
 
   return (
-    <div className="min-h-screen w-full bg-slate-100 text-slate-800">
+    <div className="min-h-screen w-full bg-slate-100 text-slate-900">
       <TopNav currentLabel="الفواتير" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
-          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">
-              تفاصيل الفاتورة
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="text-right">
+              <p className="text-lg font-semibold text-slate-900">عرض الفاتورة</p>
+              <p className="text-sm text-slate-500">
+                تخطيط أبسط وأكثر وضوحًا لقراءة الفاتورة بسرعة.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {invoice ? (
+                <Link
+                  href={`/invoices/new?id=${encodeURIComponent(invoice.id)}`}
+                  className="rounded-full border border-sky-600 bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
+                >
+                  تعديل الفاتورة
+                </Link>
+              ) : null}
+              <Link
+                href="/invoices"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                رجوع
+              </Link>
             </div>
           </div>
 
           {errorMessage ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {errorMessage}
             </div>
           ) : null}
 
           {isLoading ? (
-            <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500 shadow-sm">
-              جاري تحميل بيانات الفاتورة...
-            </div>
+            <ViewInvoiceLoadingState />
           ) : invoice ? (
-            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">رقم الفاتورة</label>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    {invoice.id}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">العميل</label>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    {invoice.client}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">التاريخ</label>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    {invoice.date}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">تاريخ الاستحقاق</label>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    {invoice.dueDate || "-"}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-4 overflow-hidden rounded-lg border border-slate-200">
-                <table className="w-full min-w-[640px] text-right text-xs sm:text-sm">
-                  <thead className="bg-slate-50 text-slate-600">
-                    <tr>
-                      <th className="px-2 py-2 sm:px-3 sm:py-3">البند</th>
-                      <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">السعر</th>
-                      <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الكمية</th>
-                      <th className="px-2 py-2 sm:px-3 sm:py-3 text-center">الإجمالي</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-t border-slate-200">
-                      <td
-                        className="px-2 py-4 sm:px-3 sm:py-4 text-center text-slate-500"
-                        colSpan={4}
-                      >
-                        تفاصيل البنود غير متاحة من الـ API حاليًا.
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الملاحظات</label>
-                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    -
-                  </div>
-                </div>
-                <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">الإجمالي</span>
-                    <span className="font-semibold text-slate-700">
-                      {invoice.total} {invoice.currency}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">الخصم</span>
-                    <span className="font-semibold text-slate-700">
-                      {invoice.discount} {invoice.currency}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-600">المستحق</span>
-                    <span className="font-semibold text-rose-600">
-                      {invoice.due} {invoice.currency}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <InvoiceDocument invoice={invoice} company={companySettings} />
           ) : null}
         </main>
 
@@ -165,14 +143,12 @@ function ViewInvoicePageContent() {
 
 function ViewInvoicePageFallback() {
   return (
-    <div className="min-h-screen w-full bg-slate-100 text-slate-800">
+    <div className="min-h-screen w-full bg-slate-100 text-slate-900">
       <TopNav currentLabel="الفواتير" />
 
       <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
-          <div className="rounded-lg border border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500 shadow-sm">
-            جاري تحميل بيانات الفاتورة...
-          </div>
+          <ViewInvoiceLoadingState />
         </main>
 
         <Sidebar activeLabel="الفواتير" />

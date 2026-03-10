@@ -49,7 +49,7 @@ export default function ThemeToggle({ variant = "full", className }: ThemeToggle
       <button
         type="button"
         onClick={() => setTheme(nextTheme)}
-        className={`rounded-full border border-slate-800/80 bg-slate-900/70 p-2 text-slate-200 shadow-sm hover:bg-slate-800/80 ${className ?? ""}`}
+        className={`app-control-button inline-flex h-11 w-11 items-center justify-center rounded-2xl ${className ?? ""}`}
         aria-pressed={theme === "dark"}
         aria-label="تبديل وضع العرض"
         title={theme === "dark" ? "الوضع الداكن" : "الوضع الفاتح"}
@@ -63,11 +63,11 @@ export default function ThemeToggle({ variant = "full", className }: ThemeToggle
     <button
       type="button"
       onClick={() => setTheme(nextTheme)}
-      className={`flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition hover:bg-slate-50 ${className ?? ""}`}
+      className={`app-control-button flex w-full items-center gap-3 rounded-2xl px-3 py-2 text-sm ${className ?? ""}`}
       aria-pressed={theme === "dark"}
       aria-label="تبديل وضع العرض"
     >
-      <span className="font-semibold text-slate-700">
+      <span className="font-semibold">
         الوضع: {theme === "dark" ? "داكن" : "فاتح"}
       </span>
       <span

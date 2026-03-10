@@ -1,6 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Eye, MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
+import ActionDrawer from "@/components/ActionDrawer";
+import ViewModeToggle from "@/components/ViewModeToggle";
+import { useCollectionViewMode } from "@/hooks/useCollectionViewMode";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import Sidebar from "../../components/Sidebar";
 import TopNav from "../../components/TopNav";
@@ -68,6 +72,9 @@ export default function UsersPage() {
   const [viewUserId, setViewUserId] = useState<number | null>(null);
   const [editUserId, setEditUserId] = useState<number | null>(null);
   const [deleteUserId, setDeleteUserId] = useState<number | null>(null);
+  const { viewMode, setViewMode, isTableView } = useCollectionViewMode(
+    "reset-main-view-mode-users"
+  );
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
@@ -274,7 +281,7 @@ export default function UsersPage() {
           </section>
 
           <div
-            className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-[1fr_auto_1fr] md:items-center"
+            className="grid grid-cols-1 gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-[1fr_auto_auto_1fr] md:items-center"
             dir="ltr"
           >
             <div className="flex justify-start">
@@ -308,6 +315,9 @@ export default function UsersPage() {
                 </svg>
               </div>
             </div>
+            <div className="flex justify-center">
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            </div>
             <div className="text-right text-lg font-semibold text-slate-700" dir="rtl">
               المستخدمين
             </div>
@@ -325,7 +335,8 @@ export default function UsersPage() {
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          {isTableView ? (
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[720px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
                 <thead className="bg-slate-50 text-slate-600">
@@ -390,15 +401,11 @@ export default function UsersPage() {
                         <td className="px-2 py-2 sm:px-3 sm:py-3 text-center text-slate-500">
                           <button
                             type="button"
-                            className="rounded-full p-1 hover:bg-slate-200"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
                             aria-label="خيارات"
                             onClick={() => setOpenActionId(user.id)}
                           >
-                            <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-                              <circle cx="12" cy="5" r="1.6" />
-                              <circle cx="12" cy="12" r="1.6" />
-                              <circle cx="12" cy="19" r="1.6" />
-                            </svg>
+                            <MoreHorizontal className="h-4 w-4" />
                           </button>
                         </td>
                       </tr>
@@ -408,12 +415,87 @@ export default function UsersPage() {
               </table>
             </div>
           </div>
+          ) : isLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm">
+              جاري تحميل المستخدمين...
+            </div>
+          ) : filteredUsers.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm">
+              لا توجد بيانات مطابقة للبحث الحالي.
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredUsers.map((user) => (
+                <article
+                  key={user.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">{user.name}</h3>
+                      <p className="mt-1 text-sm text-slate-500">{user.email}</p>
+                    </div>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        isActiveStatus(user.status)
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {getStatusLabel(user.status)}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                      <p className="text-xs text-slate-400">الهاتف</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{user.phone}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                      <p className="text-xs text-slate-400">الصلاحية</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">
+                        {getRoleLabel(user.role)}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3 col-span-2">
+                      <p className="text-xs text-slate-400">تاريخ الانضمام</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{user.joinedAt}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setViewUserId(user.id)}
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      عرض
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(user)}
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      تعديل
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteUserId(user.id)}
+                      className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+                    >
+                      حذف
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </main>
 
         <Sidebar activeLabel="المستخدمين" />
       </div>
 
-      {selectedActionUser && (
+      {selectedActionUser && openActionId === -1 && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
           dir="rtl"
@@ -469,6 +551,72 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+      <ActionDrawer
+        open={selectedActionUser !== null}
+        title="إجراءات المستخدم"
+        subtitle={selectedActionUser?.name}
+        onClose={() => setOpenActionId(null)}
+        actions={
+          selectedActionUser
+            ? [
+                {
+                  id: "view",
+                  label: "عرض المستخدم",
+                  description: "اعرض بيانات المستخدم الحالية وتفاصيل حسابه.",
+                  icon: Eye,
+                  onClick: () => {
+                    setViewUserId(selectedActionUser.id);
+                    setOpenActionId(null);
+                  },
+                },
+                {
+                  id: "edit",
+                  label: "تعديل المستخدم",
+                  description: "افتح نموذج التعديل لنفس المستخدم.",
+                  icon: PencilLine,
+                  onClick: () => handleStartEdit(selectedActionUser),
+                },
+                {
+                  id: "delete",
+                  label: "حذف المستخدم",
+                  description: "احذف المستخدم نهائيًا بعد التأكيد.",
+                  icon: Trash2,
+                  tone: "danger" as const,
+                  onClick: () => {
+                    setDeleteUserId(selectedActionUser.id);
+                    setOpenActionId(null);
+                  },
+                },
+              ]
+            : []
+        }
+      >
+        {selectedActionUser ? (
+          <div className="space-y-3 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">البريد</span>
+              <span className="font-medium text-slate-900">{selectedActionUser.email}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">الهاتف</span>
+              <span className="font-medium text-slate-900">{selectedActionUser.phone}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">الصلاحية</span>
+              <span className="font-medium text-slate-900">
+                {getRoleLabel(selectedActionUser.role)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">الحالة</span>
+              <span className="font-medium text-slate-900">
+                {getStatusLabel(selectedActionUser.status)}
+              </span>
+            </div>
+          </div>
+        ) : null}
+      </ActionDrawer>
 
       {selectedViewUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" dir="rtl">

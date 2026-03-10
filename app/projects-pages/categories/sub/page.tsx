@@ -2,6 +2,18 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  Boxes,
+  Eye,
+  FolderTree,
+  MoreHorizontal,
+  PencilLine,
+  Search,
+  Trash2,
+} from "lucide-react";
+import ActionDrawer from "@/components/ActionDrawer";
+import ViewModeToggle from "@/components/ViewModeToggle";
+import { useCollectionViewMode } from "@/hooks/useCollectionViewMode";
 import ConfirmDeleteModal from "../../../components/ConfirmDeleteModal";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
@@ -32,6 +44,10 @@ const emptySubCategoryForm = {
 
 const getStatusLabel = (value: string) => statusLabelMap[value] ?? value;
 const isActiveStatus = (value: string) => getStatusLabel(value) === "نشط";
+const getStatusClasses = (value: string) =>
+  isActiveStatus(value)
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : "border-amber-200 bg-amber-50 text-amber-700";
 
 export default function SubCategoriesPage() {
   const [query, setQuery] = useState("");
@@ -49,6 +65,9 @@ export default function SubCategoriesPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
   const [subCategoryForm, setSubCategoryForm] = useState(emptySubCategoryForm);
+  const { viewMode, setViewMode, isTableView } = useCollectionViewMode(
+    "reset-main-view-mode-sub-categories"
+  );
 
   useEffect(() => {
     let active = true;
@@ -68,13 +87,15 @@ export default function SubCategoriesPage() {
         }));
       } catch (error) {
         if (!active) return;
-        setErrorMessage(getErrorMessage(error, "تعذر تحميل التصنيفات الفرعية."));
+        setErrorMessage(
+          getErrorMessage(error, "تعذر تحميل التصنيفات الفرعية.")
+        );
       } finally {
         if (active) setIsLoading(false);
       }
     };
 
-    loadData();
+    void loadData();
     return () => {
       active = false;
     };
@@ -86,14 +107,19 @@ export default function SubCategoriesPage() {
   );
 
   const filteredSubCategories = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return subCategories;
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return subCategories;
 
     return subCategories.filter((item) =>
-      [item.name, mainById[item.mainCategoryId] ?? "", item.status, getStatusLabel(item.status)]
+      [
+        item.name,
+        mainById[item.mainCategoryId] ?? "",
+        item.status,
+        getStatusLabel(item.status),
+      ]
         .join(" ")
         .toLowerCase()
-        .includes(q)
+        .includes(normalizedQuery)
     );
   }, [mainById, query, subCategories]);
 
@@ -212,250 +238,392 @@ export default function SubCategoriesPage() {
     <div className="min-h-screen w-full bg-slate-100 text-slate-800">
       <TopNav currentLabel="التصنيفات الفرعية" />
 
-      <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
+      <div
+        className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6"
+        dir="ltr"
+      >
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
           <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <article className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-sm text-slate-500">إجمالي التصنيفات الفرعية</p>
-              <p className="mt-2 text-2xl font-bold text-slate-800">{subCategories.length}</p>
+              <p className="mt-2 text-2xl font-bold text-slate-800">
+                {subCategories.length}
+              </p>
             </article>
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <article className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-sm text-slate-500">النشط</p>
-              <p className="mt-2 text-2xl font-bold text-emerald-700">{activeCount}</p>
+              <p className="mt-2 text-2xl font-bold text-emerald-700">
+                {activeCount}
+              </p>
             </article>
-            <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <article className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
               <p className="text-sm text-slate-500">إجمالي المنتجات</p>
-              <p className="mt-2 text-2xl font-bold text-slate-800">{totalProducts}</p>
+              <p className="mt-2 text-2xl font-bold text-slate-800">
+                {totalProducts}
+              </p>
             </article>
           </section>
 
           {errorMessage ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {errorMessage}
             </div>
           ) : null}
 
           {saveError ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {saveError}
             </div>
           ) : null}
 
           {deleteError ? (
-            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {deleteError}
             </div>
           ) : null}
 
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div
-              className="grid grid-cols-1 gap-3 border-b border-slate-200 px-4 py-3 md:grid-cols-[1fr_auto_1fr] md:items-center"
-              dir="ltr"
-            >
-              <div className="flex flex-wrap items-center justify-start gap-2">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold tracking-[0.18em] text-sky-700">
+                  إدارة التصنيفات
+                </p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-950">
+                  التصنيفات الفرعية
+                </h2>
+                <p className="mt-2 text-sm text-slate-500">
+                  {isLoading
+                    ? "يتم تحميل التصنيفات الآن..."
+                    : `يعرض ${filteredSubCategories.length} من أصل ${subCategories.length} تصنيف.`}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <ViewModeToggle value={viewMode} onChange={setViewMode} />
                 <Link
                   href="/projects-pages/categories/main"
-                  className="rounded-full border border-slate-300 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50"
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                 >
-                  الذهاب للأساسية
+                  التصنيفات الأساسية
                 </Link>
                 <button
                   type="button"
                   onClick={openAddModal}
-                  className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600"
+                  className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
                   تصنيف فرعي جديد
                 </button>
               </div>
-              <div className="flex justify-center">
-                <div className="app-search">
-                  <input
-                    className="app-search-input h-10 w-48 px-3 text-right text-sm outline-none"
-                    placeholder="بحث"
-                    dir="rtl"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                  />
-                  <svg
-                    aria-hidden="true"
-                    viewBox="0 0 24 24"
-                    className="app-search-icon h-4 w-4"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                  >
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M20 20l-3.5-3.5" />
-                  </svg>
-                </div>
-              </div>
-              <h2 className="text-right text-lg font-semibold text-slate-700" dir="rtl">
-                التصنيفات الفرعية
-              </h2>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[820px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
-                <thead className="bg-slate-50 text-slate-600">
-                  <tr>
-                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">#</th>
-                    <th className="px-2 py-2 text-right sm:px-3 sm:py-3">اسم التصنيف</th>
-                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">التصنيف الأساسي</th>
-                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">المنتجات</th>
-                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3">الحالة</th>
-                    <th className="px-2 py-2 text-center sm:px-3 sm:py-3" aria-label="الإجراءات">
-                      ...
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
-                        جاري تحميل التصنيفات الفرعية...
-                      </td>
-                    </tr>
-                  ) : filteredSubCategories.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-8 text-center text-slate-500">
-                        لا توجد تصنيفات فرعية حاليا.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredSubCategories.map((category, index) => (
-                      <tr key={category.id} className={index % 2 === 0 ? "bg-white" : "bg-slate-50"}>
-                        <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
-                          {category.id}
-                        </td>
-                        <td className="px-2 py-2 text-right font-semibold text-slate-800 sm:px-3 sm:py-3">
-                          {category.name}
-                        </td>
-                        <td className="px-2 py-2 text-center text-slate-600 sm:px-3 sm:py-3">
-                          {mainById[category.mainCategoryId] ?? "-"}
-                        </td>
-                        <td className="px-2 py-2 text-center text-slate-700 sm:px-3 sm:py-3">
-                          {category.products}
-                        </td>
-                        <td className="px-2 py-2 text-center sm:px-3 sm:py-3">
-                          <span
-                            className={`rounded-full px-2 py-1 text-xs font-semibold ${
-                              isActiveStatus(category.status)
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-amber-50 text-amber-700"
-                            }`}
-                          >
-                            {getStatusLabel(category.status)}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2 text-center text-slate-500 sm:px-3 sm:py-3">
-                          <button
-                            type="button"
-                            onClick={() => setOpenCategoryId(category.id)}
-                            className="rounded-full p-1 hover:bg-slate-200"
-                            aria-label="خيارات"
-                          >
-                            <svg
-                              aria-hidden="true"
-                              viewBox="0 0 24 24"
-                              className="h-4 w-4"
-                              fill="currentColor"
-                            >
-                              <circle cx="12" cy="5" r="1.6" />
-                              <circle cx="12" cy="12" r="1.6" />
-                              <circle cx="12" cy="19" r="1.6" />
-                            </svg>
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+            <div className="mt-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+              <label className="relative block">
+                <Search className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-11 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white focus:shadow-[0_0_0_4px_rgba(56,189,248,0.12)]"
+                  placeholder="ابحث بالاسم أو التصنيف الأساسي أو الحالة"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </label>
+
+              <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600">
+                {isTableView ? "عرض جدولي" : "عرض بالكروت"}
+              </div>
             </div>
           </section>
+
+          {isTableView ? (
+            <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-950">
+                    قائمة التصنيفات الفرعية
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    عرض واضح للتصنيفات الفرعية مع إجراءات موحدة.
+                  </p>
+                </div>
+                <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
+                  {filteredSubCategories.length} نتيجة
+                </div>
+              </div>
+
+              {isLoading ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[860px] text-right">
+                    <thead className="bg-slate-50/90 text-sm text-slate-500">
+                      <tr>
+                        <th className="px-4 py-4 font-medium">#</th>
+                        <th className="px-4 py-4 font-medium">اسم التصنيف</th>
+                        <th className="px-4 py-4 font-medium">التصنيف الأساسي</th>
+                        <th className="px-4 py-4 font-medium">المنتجات</th>
+                        <th className="px-4 py-4 font-medium">الحالة</th>
+                        <th className="px-4 py-4 text-center font-medium">
+                          الإجراءات
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Array.from({ length: 6 }).map((_, index) => (
+                        <tr key={index} className="border-t border-slate-100">
+                          {Array.from({ length: 6 }).map((__, cell) => (
+                            <td key={cell} className="px-4 py-4">
+                              <div className="h-10 animate-pulse rounded-2xl bg-slate-100" />
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : filteredSubCategories.length === 0 ? (
+                <div className="px-6 py-14 text-center">
+                  <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400">
+                    <FolderTree className="h-6 w-6" />
+                  </div>
+                  <h3 className="mt-4 text-lg font-semibold text-slate-950">
+                    لا توجد تصنيفات فرعية مطابقة
+                  </h3>
+                  <p className="mt-2 text-sm text-slate-500">
+                    جرّب تعديل البحث الحالي أو أضف تصنيفًا فرعيًا جديدًا.
+                  </p>
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setQuery("")}
+                      className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                      مسح البحث
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openAddModal}
+                      className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      إضافة تصنيف
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[860px] text-right">
+                    <thead className="bg-slate-50/90 text-sm text-slate-500">
+                      <tr>
+                        <th className="px-4 py-4 font-medium">#</th>
+                        <th className="px-4 py-4 font-medium">اسم التصنيف</th>
+                        <th className="px-4 py-4 font-medium">التصنيف الأساسي</th>
+                        <th className="px-4 py-4 font-medium">المنتجات</th>
+                        <th className="px-4 py-4 font-medium">الحالة</th>
+                        <th className="px-4 py-4 text-center font-medium">
+                          الإجراءات
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredSubCategories.map((category) => (
+                        <tr
+                          key={category.id}
+                          className="border-t border-slate-100 transition hover:bg-slate-50/80"
+                        >
+                          <td className="px-4 py-4 text-sm font-medium text-slate-700">
+                            #{category.id}
+                          </td>
+                          <td className="px-4 py-4">
+                            <p className="text-sm font-semibold text-slate-950">
+                              {category.name}
+                            </p>
+                          </td>
+                          <td className="px-4 py-4 text-sm text-slate-700">
+                            {mainById[category.mainCategoryId] ?? "-"}
+                          </td>
+                          <td className="px-4 py-4 text-sm text-slate-700">
+                            {category.products}
+                          </td>
+                          <td className="px-4 py-4">
+                            <span
+                              className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
+                                category.status
+                              )}`}
+                            >
+                              {getStatusLabel(category.status)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-center">
+                            <button
+                              type="button"
+                              onClick={() => setOpenCategoryId(category.id)}
+                              className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                              aria-label={`إجراءات ${category.name}`}
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          ) : isLoading ? (
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="h-24 animate-pulse rounded-[22px] bg-slate-100" />
+                  <div className="mt-4 h-28 animate-pulse rounded-[22px] bg-slate-100" />
+                </div>
+              ))}
+            </section>
+          ) : filteredSubCategories.length === 0 ? (
+            <section className="rounded-[28px] border border-slate-200 bg-white px-6 py-14 text-center shadow-sm">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-400">
+                <Boxes className="h-6 w-6" />
+              </div>
+              <h3 className="mt-4 text-lg font-semibold text-slate-950">
+                لا توجد بطاقات لعرضها الآن
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                لا توجد نتائج مطابقة للبحث الحالي.
+              </p>
+            </section>
+          ) : (
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredSubCategories.map((category) => (
+                <article
+                  key={category.id}
+                  className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-lg font-semibold text-slate-950">
+                        {category.name}
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {mainById[category.mainCategoryId] ?? "-"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setOpenCategoryId(category.id)}
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700"
+                      aria-label={`إجراءات ${category.name}`}
+                    >
+                      <MoreHorizontal className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span
+                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
+                        category.status
+                      )}`}
+                    >
+                      {getStatusLabel(category.status)}
+                    </span>
+                    <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+                      #{category.id}
+                    </span>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                      <p className="text-xs text-slate-400">التصنيف الأساسي</p>
+                      <p className="mt-1 truncate text-sm font-medium text-slate-900">
+                        {mainById[category.mainCategoryId] ?? "-"}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                      <p className="text-xs text-slate-400">المنتجات</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {category.products}
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </section>
+          )}
         </main>
 
         <Sidebar activeLabel="التصنيفات الفرعية" />
       </div>
 
-      {selectedActionCategory ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-lg bg-white p-4 shadow-xl" dir="rtl">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="text-right">
-                <p className="text-sm font-semibold text-slate-700">خيارات التصنيف الفرعي</p>
-                <p className="text-xs text-slate-500">{selectedActionCategory.name}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpenCategoryId(null)}
-                className="rounded-full p-1 text-slate-500 hover:bg-slate-100"
-                aria-label="إغلاق"
-              >
-                ×
-              </button>
+      <ActionDrawer
+        open={selectedActionCategory !== null}
+        title="إجراءات التصنيف الفرعي"
+        subtitle={selectedActionCategory?.name}
+        onClose={() => setOpenCategoryId(null)}
+        actions={
+          selectedActionCategory
+            ? [
+                {
+                  id: "view",
+                  label: "عرض البيانات",
+                  description: "افتح تفاصيل التصنيف الفرعي داخل النافذة الحالية.",
+                  icon: Eye,
+                  onClick: () => {
+                    setViewCategoryId(selectedActionCategory.id);
+                    setOpenCategoryId(null);
+                  },
+                },
+                {
+                  id: "edit",
+                  label: "تعديل التصنيف",
+                  description: "افتح نموذج التعديل بنفس منطق الحفظ الحالي.",
+                  icon: PencilLine,
+                  onClick: () => openEditModal(selectedActionCategory),
+                },
+                {
+                  id: "delete",
+                  label: "حذف التصنيف",
+                  description: "احذف التصنيف بعد رسالة التأكيد.",
+                  icon: Trash2,
+                  tone: "danger" as const,
+                  onClick: () => {
+                    setDeleteCategoryId(selectedActionCategory.id);
+                    setOpenCategoryId(null);
+                  },
+                },
+              ]
+            : []
+        }
+      >
+        {selectedActionCategory ? (
+          <div className="space-y-3 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">التصنيف الأساسي</span>
+              <span className="font-medium text-slate-900">
+                {mainById[selectedActionCategory.mainCategoryId] ?? "-"}
+              </span>
             </div>
-
-            <div className="mt-4 space-y-2 text-sm">
-              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
-                <span className="text-slate-600">التصنيف الأساسي</span>
-                <span className="font-semibold text-slate-700">
-                  {mainById[selectedActionCategory.mainCategoryId] ?? "-"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
-                <span className="text-slate-600">المنتجات</span>
-                <span className="font-semibold text-slate-700">
-                  {selectedActionCategory.products}
-                </span>
-              </div>
-              <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
-                <span className="text-slate-600">الحالة</span>
-                <span className="font-semibold text-slate-700">
-                  {getStatusLabel(selectedActionCategory.status)}
-                </span>
-              </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">المنتجات</span>
+              <span className="font-medium text-slate-900">
+                {selectedActionCategory.products}
+              </span>
             </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-              <button
-                type="button"
-                onClick={() => {
-                  setViewCategoryId(selectedActionCategory.id);
-                  setOpenCategoryId(null);
-                }}
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
-              >
-                عرض
-              </button>
-              <button
-                type="button"
-                onClick={() => openEditModal(selectedActionCategory)}
-                className="rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-600 hover:bg-slate-50"
-              >
-                تعديل
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteCategoryId(selectedActionCategory.id);
-                  setOpenCategoryId(null);
-                }}
-                className="col-span-2 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700 hover:bg-rose-100"
-              >
-                حذف
-              </button>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">الحالة</span>
+              <span className="font-medium text-slate-900">
+                {getStatusLabel(selectedActionCategory.status)}
+              </span>
             </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </ActionDrawer>
 
       {selectedViewCategory ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-lg bg-white p-4 shadow-xl" dir="rtl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="text-right">
-                <p className="text-sm font-semibold text-slate-700">بيانات التصنيف الفرعي</p>
+                <p className="text-sm font-semibold text-slate-700">
+                  بيانات التصنيف الفرعي
+                </p>
                 <p className="text-xs text-slate-500">{selectedViewCategory.name}</p>
               </div>
               <button
@@ -471,7 +639,9 @@ export default function SubCategoriesPage() {
             <div className="mt-4 grid gap-2 text-sm">
               <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
                 <span className="text-slate-600">الاسم</span>
-                <span className="font-semibold text-slate-700">{selectedViewCategory.name}</span>
+                <span className="font-semibold text-slate-700">
+                  {selectedViewCategory.name}
+                </span>
               </div>
               <div className="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2">
                 <span className="text-slate-600">التصنيف الأساسي</span>
@@ -502,7 +672,9 @@ export default function SubCategoriesPage() {
             <div className="mb-4 flex items-center justify-between border-b border-slate-200 pb-3">
               <div>
                 <h2 className="text-lg font-bold text-slate-800">
-                  {editingCategoryId !== null ? "تعديل تصنيف فرعي" : "إضافة تصنيف فرعي"}
+                  {editingCategoryId !== null
+                    ? "تعديل تصنيف فرعي"
+                    : "إضافة تصنيف فرعي"}
                 </h2>
                 <p className="text-sm text-slate-500">
                   {editingCategoryId !== null
@@ -516,7 +688,7 @@ export default function SubCategoriesPage() {
                 className="rounded-full p-2 text-slate-500 hover:bg-slate-100"
                 aria-label="إغلاق"
               >
-                x
+                ×
               </button>
             </div>
 

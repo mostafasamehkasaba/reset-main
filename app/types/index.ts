@@ -20,6 +20,9 @@ export type SidebarContextValue = {
   setOpen: (value: boolean) => void;
   toggle: () => void;
   close: () => void;
+  collapsed: boolean;
+  setCollapsed: (value: boolean) => void;
+  toggleCollapsed: () => void;
 };
 
 export type SidebarProviderProps = {
@@ -123,6 +126,8 @@ export type Client = {
   defaultPaymentMethod?: string;
   internalNotes?: string;
   currency: string;
+  createdAt?: string;
+  updatedAt?: string;
   invoices: number;
   due: number;
   stats: ClientStats;

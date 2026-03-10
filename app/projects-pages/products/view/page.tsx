@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import { getErrorMessage } from "../../../lib/fetcher";
-import type { Product } from "../../../lib/product-store";
+import { normalizeProductStatusLabel, type Product } from "../../../lib/product-store";
 import { listProducts } from "../../../services/products";
 
 const FALLBACK_PRODUCT_IMAGE = "/file.svg";
@@ -105,9 +105,19 @@ function ProductViewPageContent() {
 
               <div className="mt-4 grid gap-4 lg:grid-cols-2">
                 <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الفئة</label>
+                  <label className="text-sm font-semibold text-slate-700">التصنيف الرئيسي</label>
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    {product.category}
+                    {product.mainCategoryName && product.mainCategoryName !== "-"
+                      ? product.mainCategoryName
+                      : "-"}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">التصنيف الفرعي</label>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    {product.subCategoryName && product.subCategoryName !== "-"
+                      ? product.subCategoryName
+                      : product.category}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -135,9 +145,15 @@ function ProductViewPageContent() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-semibold text-slate-700">وحدة القياس</label>
+                  <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                    {product.unit}
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-semibold text-slate-700">الحالة</label>
                   <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                    {product.status}
+                    {normalizeProductStatusLabel(product.status)}
                   </div>
                 </div>
                 <div className="space-y-2">

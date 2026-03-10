@@ -1,154 +1,60 @@
 "use client";
 
-import Link from "next/link";
-import { FormEvent, useState } from "react";
+import { useEffect, useState } from "react";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
-import { getErrorMessage } from "../../../lib/fetcher";
-import { createPaymentMethod } from "../../../services/payment-methods";
-
-const paymentTypes = [
-  { value: "bank", label: "بنكي" },
-  { value: "card", label: "بطاقة" },
-  { value: "wallet", label: "محفظة رقمية" },
-];
-
-const currencyOptions = ["USD", "OMR", "SAR"];
+import { PaymentMethodForm } from "@/components/payment-methods/PaymentMethodForm";
+import { usePaymentMethodForm } from "@/hooks/usePaymentMethodForm";
 
 export default function NewPaymentMethodPage() {
-  const [name, setName] = useState("");
-  const [methodType, setMethodType] = useState(paymentTypes[0]?.value ?? "bank");
-  const [currency, setCurrency] = useState(currencyOptions[0] ?? "USD");
-  const [desc, setDesc] = useState("");
-  const [saveMessage, setSaveMessage] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [methodId, setMethodId] = useState<number | null>(null);
+  const [isRouteReady, setIsRouteReady] = useState(false);
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaveMessage("");
-    setErrorMessage("");
+  useEffect(() => {
+    const rawValue =
+      new URLSearchParams(window.location.search).get("id")?.trim() || "";
+    const parsedValue = Number.parseInt(rawValue, 10);
 
-    if (!name.trim()) {
-      setErrorMessage("يرجى إدخال اسم وسيلة الدفع.");
-      return;
-    }
+    setMethodId(Number.isFinite(parsedValue) ? parsedValue : null);
+    setIsRouteReady(true);
+  }, []);
 
-    setIsSubmitting(true);
-
-    try {
-      await createPaymentMethod({
-        name: name.trim(),
-        desc: desc.trim() || undefined,
-        currency,
-        type: methodType,
-      });
-
-      setSaveMessage("تم حفظ وسيلة الدفع بنجاح.");
-      setName("");
-      setDesc("");
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error, "تعذر حفظ وسيلة الدفع."));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  const form = usePaymentMethodForm({
+    methodId: isRouteReady ? methodId : null,
+  });
 
   return (
-    <div className="min-h-screen w-full bg-slate-100 text-slate-800">
+    <div className="min-h-screen w-full bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.12),transparent_28%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] text-slate-900">
       <TopNav currentLabel="وسائل الدفع" />
 
-      <div className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6" dir="ltr">
+      <div
+        className="flex w-full gap-0 px-3 py-4 sm:px-4 sm:py-6 lg:gap-5 lg:px-6"
+        dir="ltr"
+      >
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
-          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">وسيلة دفع جديدة</div>
-            <Link
-              href="/projects-pages/payment-methods"
-              className="rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-600"
-            >
-              رجوع
-            </Link>
-          </div>
+          <section className="rounded-[32px] border border-slate-200 bg-white px-5 py-6 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.3)] sm:px-6">
+            <p className="text-sm font-semibold tracking-[0.18em] text-sky-700">
+              وسائل الدفع
+            </p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
+              {form.isEditMode ? "تعديل وسيلة الدفع" : "إضافة وسيلة دفع جديدة"}
+            </h1>
+            <p className="mt-3 text-sm leading-7 text-slate-500 sm:text-base">
+              حافظت هذه الصفحة على نفس الحقول المتصلة حاليًا بالباكند، مع تنظيم أوضح للفورم ووضع تعديل مباشر عند فتح الصفحة بمعرّف الوسيلة.
+            </p>
+          </section>
 
-          <form
-            onSubmit={handleSubmit}
-            className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">اسم الوسيلة</label>
-                <input
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">النوع</label>
-                <select
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                  value={methodType}
-                  onChange={(event) => setMethodType(event.target.value)}
-                >
-                  {paymentTypes.map((entry) => (
-                    <option key={entry.value} value={entry.value}>
-                      {entry.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">العملة</label>
-                <select
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                  value={currency}
-                  onChange={(event) => setCurrency(event.target.value)}
-                >
-                  {currencyOptions.map((code) => (
-                    <option key={code} value={code}>
-                      {code}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">الوصف</label>
-                <input
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  value={desc}
-                  onChange={(event) => setDesc(event.target.value)}
-                />
-              </div>
-            </div>
-
-            {errorMessage ? (
-              <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                {errorMessage}
-              </div>
-            ) : null}
-
-            {saveMessage ? (
-              <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                {saveMessage}
-              </div>
-            ) : null}
-
-            <div className="mt-6 flex items-center justify-between">
-              <button
-                type="submit"
-                className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-70"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? "جارٍ الحفظ..." : "حفظ"}
-              </button>
-              <Link
-                href="/projects-pages/payment-methods"
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600"
-              >
-                إلغاء
-              </Link>
-            </div>
-          </form>
+          <PaymentMethodForm
+            values={form.values}
+            isEditMode={form.isEditMode}
+            isLoading={!isRouteReady || form.isLoading}
+            isSubmitting={form.isSubmitting}
+            loadError={form.loadError}
+            submitError={form.submitError}
+            successMessage={form.successMessage}
+            onChange={form.updateField}
+            onSubmit={form.submit}
+          />
         </main>
 
         <Sidebar activeLabel="وسائل الدفع" />

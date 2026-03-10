@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { Copy, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import ActionDrawer from "@/components/ActionDrawer";
+import ViewModeToggle from "@/components/ViewModeToggle";
+import { useCollectionViewMode } from "@/hooks/useCollectionViewMode";
 import ConfirmDeleteModal from "../../components/ConfirmDeleteModal";
 import Sidebar from "../../components/Sidebar";
 import TopNav from "../../components/TopNav";
@@ -12,11 +16,15 @@ import type { Supplier } from "../../types";
 export default function SuppliersPage() {
   const [query, setQuery] = useState("");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [openActionSupplierId, setOpenActionSupplierId] = useState<number | null>(null);
   const [deleteSupplierId, setDeleteSupplierId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
+  const { viewMode, setViewMode, isTableView } = useCollectionViewMode(
+    "reset-main-view-mode-suppliers"
+  );
 
   useEffect(() => {
     let active = true;
@@ -85,6 +93,10 @@ export default function SuppliersPage() {
     () => suppliers.find((supplier) => supplier.id === deleteSupplierId) ?? null,
     [deleteSupplierId, suppliers]
   );
+  const selectedActionSupplier = useMemo(
+    () => suppliers.find((supplier) => supplier.id === openActionSupplierId) ?? null,
+    [openActionSupplierId, suppliers]
+  );
 
   const handleDeleteSupplier = async (supplierId: number) => {
     setDeleteError("");
@@ -94,10 +106,30 @@ export default function SuppliersPage() {
       await deleteSupplier(supplierId);
       setSuppliers((prev) => prev.filter((supplier) => supplier.id !== supplierId));
       setDeleteSupplierId(null);
+      setOpenActionSupplierId(null);
     } catch (error) {
       setDeleteError(getErrorMessage(error, "تعذر حذف المورد."));
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleCopySupplier = async (supplier: Supplier) => {
+    const details = [
+      `الاسم: ${supplier.name}`,
+      `البريد: ${supplier.email}`,
+      `الهاتف: ${supplier.phone}`,
+      `المدينة: ${supplier.city}`,
+      `الدولة: ${supplier.country}`,
+      `الرصيد: ${supplier.balance.toLocaleString()} ج.م`,
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(details);
+    } catch {
+      window.alert(details);
+    } finally {
+      setOpenActionSupplierId(null);
     }
   };
 
@@ -125,7 +157,7 @@ export default function SuppliersPage() {
           </section>
 
           <div
-            className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-[1fr_auto_1fr] md:items-center"
+            className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm md:grid-cols-[1fr_auto_auto_1fr] md:items-center"
             dir="ltr"
           >
             <div className="flex flex-wrap items-center justify-start gap-2">
@@ -158,6 +190,9 @@ export default function SuppliersPage() {
                 </svg>
               </div>
             </div>
+            <div className="flex justify-center">
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
+            </div>
             <div className="text-right text-lg font-semibold text-slate-700" dir="rtl">
               الموردين
             </div>
@@ -175,7 +210,8 @@ export default function SuppliersPage() {
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {isTableView ? (
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1700px] border-separate border-spacing-0 text-right text-xs sm:text-sm">
                 <thead className="bg-blue-600 text-white">
@@ -275,8 +311,9 @@ export default function SuppliersPage() {
                         <td className="px-3 py-3 text-center sm:px-4 sm:py-4">
                           <button
                             type="button"
-                            onClick={() => setDeleteSupplierId(supplier.id)}
-                            className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700 hover:bg-rose-100"
+                            onClick={() => setOpenActionSupplierId(supplier.id)}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-[0px] text-slate-500 transition before:text-sm before:font-semibold before:tracking-[-0.18em] before:content-['...'] hover:bg-slate-50 hover:text-slate-700"
+                            aria-label="خيارات المورد"
                           >
                             حذف
                           </button>
@@ -288,10 +325,145 @@ export default function SuppliersPage() {
               </table>
             </div>
           </div>
+          ) : isLoading ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm">
+              جاري تحميل الموردين...
+            </div>
+          ) : filteredSuppliers.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500 shadow-sm">
+              لا توجد بيانات مطابقة للبحث الحالي.
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {filteredSuppliers.map((supplier) => (
+                <article
+                  key={supplier.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold text-slate-900">{supplier.name}</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {supplier.city}، {supplier.country}
+                      </p>
+                    </div>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        supplier.status === "نشط"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : supplier.status === "موقوف"
+                            ? "bg-amber-50 text-amber-700"
+                            : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {supplier.status}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                      <p className="text-xs text-slate-400">الهاتف</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{supplier.phone}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                      <p className="text-xs text-slate-400">البريد</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{supplier.email}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                      <p className="text-xs text-slate-400">مدة السداد</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">
+                        {supplier.paymentTermDays} يوم
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                      <p className="text-xs text-slate-400">الرصيد</p>
+                      <p className="mt-1 text-sm font-semibold text-emerald-700">
+                        {supplier.balance.toLocaleString()} ج.م
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-3">
+                    <p className="text-xs text-slate-400">البنك</p>
+                    <p className="mt-1 text-sm font-medium text-slate-700">{supplier.bankName}</p>
+                    <p className="mt-2 text-xs text-slate-500">{supplier.bankAccountNumber}</p>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteSupplierId(supplier.id)}
+                      className="rounded-full border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 transition hover:bg-rose-100"
+                    >
+                      حذف
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </main>
 
         <Sidebar activeLabel="الموردين" />
       </div>
+
+      <ActionDrawer
+        open={selectedActionSupplier !== null}
+        title="إجراءات المورد"
+        subtitle={selectedActionSupplier?.name}
+        onClose={() => setOpenActionSupplierId(null)}
+        actions={
+          selectedActionSupplier
+            ? [
+                {
+                  id: "copy",
+                  label: "نسخ البيانات",
+                  description: "انسخ معلومات التواصل والرصيد بسرعة.",
+                  icon: Copy,
+                  onClick: () => {
+                    void handleCopySupplier(selectedActionSupplier);
+                  },
+                },
+                {
+                  id: "delete",
+                  label: "حذف المورد",
+                  description: "احذف المورد نهائيًا بعد رسالة التأكيد.",
+                  icon: Trash2,
+                  tone: "danger" as const,
+                  onClick: () => {
+                    setDeleteSupplierId(selectedActionSupplier.id);
+                    setOpenActionSupplierId(null);
+                  },
+                },
+              ]
+            : []
+        }
+      >
+        {selectedActionSupplier ? (
+          <div className="space-y-3 rounded-[24px] border border-slate-200 bg-slate-50/80 p-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">البريد</span>
+              <span className="font-medium text-slate-900">{selectedActionSupplier.email}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">الهاتف</span>
+              <span className="font-medium text-slate-900">{selectedActionSupplier.phone}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">الرصيد</span>
+              <span className="font-semibold text-emerald-700">
+                {selectedActionSupplier.balance.toLocaleString()} ج.م
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-slate-500">مدة السداد</span>
+              <span className="font-medium text-slate-900">
+                {selectedActionSupplier.paymentTermDays} يوم
+              </span>
+            </div>
+          </div>
+        ) : null}
+      </ActionDrawer>
 
       <ConfirmDeleteModal
         open={deleteSupplierId !== null}

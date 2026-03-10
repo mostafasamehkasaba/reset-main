@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+﻿import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import {
   AUTH_COOKIE_NAME,
@@ -10,7 +10,16 @@ import {
 const AUTH_PATHS = new Set([LOGIN_PATH, REGISTER_PATH]);
 
 const isProtectedPath = (pathname: string) => {
-  return pathname === DEFAULT_AUTH_REDIRECT || pathname.startsWith("/projects-pages");
+  return (
+    pathname === "/" ||
+    pathname === DEFAULT_AUTH_REDIRECT ||
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/invoices") ||
+    pathname.startsWith("/customers") ||
+    pathname.startsWith("/products") ||
+    pathname.startsWith("/payments") ||
+    pathname.startsWith("/projects-pages")
+  );
 };
 
 export function proxy(request: NextRequest) {
@@ -40,5 +49,15 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/projects-pages/:path*", "/auth/login", "/auth/register"],
+  matcher: [
+    "/",
+    "/dashboard/:path*",
+    "/invoices/:path*",
+    "/customers/:path*",
+    "/products/:path*",
+    "/payments/:path*",
+    "/projects-pages/:path*",
+    "/auth/login",
+    "/auth/register",
+  ],
 };

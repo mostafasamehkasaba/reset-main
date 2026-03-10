@@ -232,7 +232,7 @@ function ClientFormPageInner() {
             <div className="text-right text-lg font-semibold text-slate-700">{pageTitle}</div>
             <button
               type="button"
-              onClick={() => router.push("/projects-pages/clients")}
+              onClick={() => router.push("/customers")}
               className="rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-600"
             >
               رجوع
@@ -441,7 +441,7 @@ function ClientFormPageInner() {
                 {submitLabel}
               </button>
               <Link
-                href="/projects-pages/clients"
+                href="/customers"
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600"
               >
                 إلغاء

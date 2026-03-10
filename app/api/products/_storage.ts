@@ -7,6 +7,10 @@ export type StoredProduct = {
   code: string;
   name: string;
   category: string;
+  mainCategoryId?: number | null;
+  mainCategoryName?: string;
+  subCategoryId?: number | null;
+  subCategoryName?: string;
   sellingPrice: number;
   purchasePrice: number;
   defaultTaxRate: number;
@@ -28,8 +32,6 @@ export type StoredProduct = {
 const dataDir = path.join(process.cwd(), "data");
 const dataFile = path.join(dataDir, "products.json");
 const productImageBaseUrl = `${API_BASE_URL}/storage/app/public`;
-const allowedUnits = ["piece", "carton", "meter", "kilo", "hour", "service"];
-
 const ensureDataFile = async () => {
   await mkdir(dataDir, { recursive: true });
 
@@ -105,7 +107,8 @@ const normalizeStatus = (value: unknown) => {
 };
 
 const normalizeUnit = (value: unknown) => {
-  const normalized = getText(value).toLowerCase();
+  const rawValue = getText(value);
+  const normalized = rawValue.toLowerCase();
 
   if (normalized === "قطعة" || normalized === "piece") return "piece";
   if (normalized === "كرتونة" || normalized === "carton") return "carton";
@@ -116,7 +119,7 @@ const normalizeUnit = (value: unknown) => {
   if (normalized === "ساعة" || normalized === "hour") return "hour";
   if (normalized === "خدمة" || normalized === "service") return "service";
 
-  return "piece";
+  return rawValue || "piece";
 };
 
 const normalizeTaxMode = (value: unknown) => {
@@ -159,7 +162,35 @@ export const normalizeStoredProduct = (input: unknown, index = 0): StoredProduct
     category: getText(
       record.category,
       record.category_name,
+      record.subCategoryName,
+      record.sub_category_name,
+      record.mainCategoryName,
+      record.main_category_name,
       asRecord(record.category)?.name,
+      "-"
+    ),
+    mainCategoryId: Math.max(
+      0,
+      Math.floor(
+        getNumber(record.mainCategoryId, record.main_category_id, asRecord(record.main_category)?.id)
+      )
+    ) || null,
+    mainCategoryName: getText(
+      record.mainCategoryName,
+      record.main_category_name,
+      asRecord(record.main_category)?.name,
+      "-"
+    ),
+    subCategoryId: Math.max(
+      0,
+      Math.floor(
+        getNumber(record.subCategoryId, record.sub_category_id, asRecord(record.sub_category)?.id)
+      )
+    ) || null,
+    subCategoryName: getText(
+      record.subCategoryName,
+      record.sub_category_name,
+      asRecord(record.sub_category)?.name,
       "-"
     ),
     sellingPrice: Math.max(0, getNumber(record.sellingPrice, record.selling_price, record.price)),
@@ -188,7 +219,7 @@ export const normalizeStoredProduct = (input: unknown, index = 0): StoredProduct
     ),
     status: normalizeStatus(record.status ?? record.state ?? record.is_active),
     currency: getText(record.currency, record.currency_code, "OMR"),
-    unit: allowedUnits.includes(normalizedUnit) ? normalizedUnit : "piece",
+    unit: normalizedUnit || "piece",
     supplierName: getText(
       record.supplierName,
       record.supplier_name,

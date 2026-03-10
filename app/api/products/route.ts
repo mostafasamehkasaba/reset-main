@@ -266,6 +266,50 @@ const buildProductDraft = (payload: Record<string, unknown>) => ({
     asRecord(payload.category)?.name,
     "-"
   ),
+  mainCategoryId:
+    payload.mainCategoryId ??
+    payload.main_category_id ??
+    asRecord(payload.main_category)?.id ??
+    null,
+  main_category_id:
+    payload.main_category_id ??
+    payload.mainCategoryId ??
+    asRecord(payload.main_category)?.id ??
+    null,
+  mainCategoryName: getText(
+    payload.mainCategoryName,
+    payload.main_category_name,
+    asRecord(payload.main_category)?.name,
+    "-"
+  ),
+  main_category_name: getText(
+    payload.main_category_name,
+    payload.mainCategoryName,
+    asRecord(payload.main_category)?.name,
+    "-"
+  ),
+  subCategoryId:
+    payload.subCategoryId ??
+    payload.sub_category_id ??
+    asRecord(payload.sub_category)?.id ??
+    null,
+  sub_category_id:
+    payload.sub_category_id ??
+    payload.subCategoryId ??
+    asRecord(payload.sub_category)?.id ??
+    null,
+  subCategoryName: getText(
+    payload.subCategoryName,
+    payload.sub_category_name,
+    asRecord(payload.sub_category)?.name,
+    "-"
+  ),
+  sub_category_name: getText(
+    payload.sub_category_name,
+    payload.subCategoryName,
+    asRecord(payload.sub_category)?.name,
+    "-"
+  ),
   sellingPrice: payload.sellingPrice ?? payload.selling_price ?? payload.price ?? 0,
   selling_price: payload.selling_price ?? payload.sellingPrice ?? payload.price ?? 0,
   purchasePrice: payload.purchasePrice ?? payload.purchase_price ?? payload.cost ?? payload.cost_price ?? 0,

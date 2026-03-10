@@ -1,140 +1,35 @@
 "use client";
 
-import Link from "next/link";
-import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
+import { ProductForm } from "@/components/products/ProductForm";
 import { getErrorMessage } from "../../../lib/fetcher";
+import { listCategories } from "../../../services/categories";
 import {
   createProductCode,
-  PRODUCT_TAX_MODES,
   PRODUCT_UNITS,
-  type Product,
-  type ProductTaxMode,
   type ProductUnit,
 } from "../../../lib/product-store";
+import { listProductUnits } from "../../../services/product-units";
 import { createProduct, listProducts, updateProduct } from "../../../services/products";
-
-type ProductFormState = {
-  name: string;
-  code: string;
-  barcode: string;
-  category: string;
-  imageUrl: string;
-  imageFile: File | null;
-  sellingPrice: string;
-  purchasePrice: string;
-  quantity: string;
-  unit: ProductUnit;
-  minStockLevel: string;
-  reorderPoint: string;
-  taxMode: ProductTaxMode;
-  defaultTaxRate: string;
-  supplierName: string;
-  currency: string;
-  dateAdded: string;
-  status: Product["status"];
-  description: string;
-};
-
-const FALLBACK_PRODUCT_IMAGE = "/file.svg";
-const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
-const SUPPORTED_IMAGE_EXTENSIONS = [
-  ".png",
-  ".jpg",
-  ".jpeg",
-  ".webp",
-  ".gif",
-  ".bmp",
-  ".svg",
-  ".avif",
-  ".heic",
-  ".heif",
-  ".tif",
-  ".tiff",
-  ".ico",
-  ".jfif",
-  ".pjp",
-  ".pjpeg",
-];
-const IMAGE_INPUT_ACCEPT = ["image/*", ...SUPPORTED_IMAGE_EXTENSIONS].join(",");
-const SUPPORTED_IMAGE_HINT =
-  "JPG, JPEG, PNG, WEBP, GIF, BMP, SVG, AVIF, HEIC, HEIF, TIFF, ICO حتى 10MB";
-
-const todayDate = () => new Date().toISOString().slice(0, 10);
-const createBarcode = () => Date.now().toString().slice(-12).padStart(12, "0");
-
-const toDateInputValue = (value: string, fallback = todayDate()) => {
-  const text = value.trim();
-  if (!text || text === "-") {
-    return fallback;
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
-    return text;
-  }
-
-  const parsed = new Date(text);
-  if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
-  }
-
-  return fallback;
-};
-
-const hasAcceptedImageExtension = (fileName: string) => {
-  const lowerFileName = fileName.trim().toLowerCase();
-  return SUPPORTED_IMAGE_EXTENSIONS.some((extension) => lowerFileName.endsWith(extension));
-};
-
-const createInitialState = (): ProductFormState => ({
-  name: "",
-  code: createProductCode(""),
-  barcode: createBarcode(),
-  category: "",
-  imageUrl: "",
-  imageFile: null,
-  sellingPrice: "0",
-  purchasePrice: "0",
-  quantity: "1",
-  unit: PRODUCT_UNITS[0] as ProductUnit,
-  minStockLevel: "2",
-  reorderPoint: "5",
-  taxMode: "rate",
-  defaultTaxRate: "15",
-  supplierName: "",
-  currency: "OMR",
-  dateAdded: todayDate(),
-  status: "متاح" as Product["status"],
-  description: "",
-});
-
-const buildFormFromProduct = (product: Product): ProductFormState => ({
-  name: product.name,
-  code: product.code,
-  barcode: product.barcode === "-" ? "" : product.barcode,
-  category: product.category === "-" ? "" : product.category,
-  imageUrl: product.imageUrl === FALLBACK_PRODUCT_IMAGE ? "" : product.imageUrl,
-  imageFile: null,
-  sellingPrice: String(product.sellingPrice),
-  purchasePrice: String(product.purchasePrice),
-  quantity: String(product.quantity),
-  unit: product.unit,
-  minStockLevel: String(product.minStockLevel),
-  reorderPoint: String(product.reorderPoint),
-  taxMode: product.taxMode,
-  defaultTaxRate: String(product.defaultTaxRate),
-  supplierName: product.supplierName === "-" ? "" : product.supplierName,
-  currency: product.currency || "OMR",
-  dateAdded: toDateInputValue(product.dateAdded),
-  status: product.status,
-  description: product.description === "-" ? "" : product.description,
-});
+import { listSuppliers } from "../../../services/suppliers";
+import type { MainCategory, SubCategory, Supplier } from "../../../types";
+import {
+  FALLBACK_PRODUCT_IMAGE,
+  MAX_IMAGE_SIZE_BYTES,
+  buildProductFormStateFromProduct,
+  createBarcode,
+  createInitialProductFormState,
+  hasAcceptedImageExtension,
+  type ProductFormState,
+} from "@/lib/products/productTypes";
+import { validateProductForm } from "@/lib/products/productValidation";
 
 export default function NewProductPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
-  const [form, setForm] = useState<ProductFormState>(createInitialState);
+  const [form, setForm] = useState<ProductFormState>(createInitialProductFormState);
   const [isCodeManuallyEdited, setIsCodeManuallyEdited] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
@@ -145,6 +40,11 @@ export default function NewProductPage() {
   const [isRouteReady, setIsRouteReady] = useState(false);
   const [editingProductId, setEditingProductId] = useState<number | null>(null);
   const [loadError, setLoadError] = useState("");
+  const [referenceError, setReferenceError] = useState("");
+  const [mainCategories, setMainCategories] = useState<MainCategory[]>([]);
+  const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [unitOptions, setUnitOptions] = useState<string[]>(PRODUCT_UNITS);
   const isEditMode = productIdParam.length > 0;
 
   const revokePreviewObjectUrl = () => {
@@ -186,6 +86,33 @@ export default function NewProductPage() {
     }));
   };
 
+  const handleCodeChange = (value: string) => {
+    setIsCodeManuallyEdited(true);
+    updateField("code", value);
+  };
+
+  const handleGenerateCode = () => {
+    updateField("code", createProductCode(form.name));
+    setIsCodeManuallyEdited(false);
+  };
+
+  const handleGenerateBarcode = () => {
+    updateField("barcode", createBarcode());
+  };
+
+  const handleMainCategoryChange = (value: string) => {
+    updateField("mainCategoryId", value);
+    updateField("subCategoryId", "");
+    updateField("category", "");
+  };
+
+  const handleSubCategoryChange = (value: string) => {
+    updateField("subCategoryId", value);
+    const selectedSub =
+      filteredSubCategories.find((category) => String(category.id) === value) ?? null;
+    updateField("category", selectedSub?.name || "");
+  };
+
   const handleImageButtonClick = () => {
     if (isSubmitting || isReadingImage) {
       return;
@@ -203,6 +130,62 @@ export default function NewProductPage() {
   useEffect(() => {
     return () => {
       revokePreviewObjectUrl();
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadReferences = async () => {
+      setReferenceError("");
+
+      const [categoriesResult, suppliersResult, unitsResult] = await Promise.allSettled([
+        listCategories(),
+        listSuppliers(),
+        listProductUnits(),
+      ]);
+
+      if (!active) {
+        return;
+      }
+
+      const errors: string[] = [];
+
+      if (categoriesResult.status === "fulfilled") {
+        setMainCategories(categoriesResult.value.mainCategories);
+        setSubCategories(categoriesResult.value.subCategories);
+      } else {
+        errors.push(getErrorMessage(categoriesResult.reason, "تعذر تحميل التصنيفات."));
+      }
+
+      if (suppliersResult.status === "fulfilled") {
+        setSuppliers(suppliersResult.value);
+      } else {
+        errors.push(getErrorMessage(suppliersResult.reason, "تعذر تحميل الموردين."));
+      }
+
+      if (unitsResult.status === "fulfilled") {
+        setUnitOptions(
+          Array.from(
+            new Set([
+              ...PRODUCT_UNITS,
+              ...unitsResult.value.map((unit) => unit.name.trim()).filter(Boolean),
+            ])
+          )
+        );
+      } else {
+        errors.push(getErrorMessage(unitsResult.reason, "تعذر تحميل وحدات القياس."));
+      }
+
+      if (errors.length > 0) {
+        setReferenceError(errors.join(" "));
+      }
+    };
+
+    void loadReferences();
+
+    return () => {
+      active = false;
     };
   }, []);
 
@@ -239,7 +222,7 @@ export default function NewProductPage() {
             ? "صورة حالية"
             : ""
         );
-        setForm(buildFormFromProduct(matchedProduct));
+        setForm(buildProductFormStateFromProduct(matchedProduct));
       } catch (error) {
         if (!active) {
           return;
@@ -255,6 +238,45 @@ export default function NewProductPage() {
       active = false;
     };
   }, [isEditMode, isRouteReady, productIdParam]);
+
+  const filteredSubCategories = useMemo(() => {
+    const mainCategoryId = Number.parseInt(form.mainCategoryId, 10);
+
+    if (!Number.isFinite(mainCategoryId)) {
+      return [];
+    }
+
+    return subCategories.filter((category) => category.mainCategoryId === mainCategoryId);
+  }, [form.mainCategoryId, subCategories]);
+
+  const normalizedUnitOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([...unitOptions, form.unit.trim()].filter((entry) => entry && entry.trim()))
+      ),
+    [form.unit, unitOptions]
+  );
+
+  const normalizedSupplierOptions = useMemo(() => {
+    const supplierEntries = suppliers.map((supplier) => ({
+      id: supplier.id,
+      name: supplier.name,
+    }));
+
+    if (
+      form.supplierName.trim() &&
+      !supplierEntries.some(
+        (supplier) => supplier.name.trim().toLowerCase() === form.supplierName.trim().toLowerCase()
+      )
+    ) {
+      supplierEntries.unshift({
+        id: -1,
+        name: form.supplierName.trim(),
+      });
+    }
+
+    return supplierEntries;
+  }, [form.supplierName, suppliers]);
 
   const handleImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -311,23 +333,27 @@ export default function NewProductPage() {
     resetImageSelection();
   };
 
+  const handleImagePreviewError = () => {
+    setValidationMessage(
+      form.imageFile
+        ? "تم اختيار الصورة، لكن المتصفح الحالي لا يدعم معاينتها. سيتم حفظها إذا قبلها الخادم."
+        : "تعذر عرض صورة المنتج الحالية."
+    );
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setValidationMessage("");
     setSaveMessage("");
 
-    if (!form.name.trim()) {
-      setValidationMessage("يرجى إدخال اسم المنتج.");
-      return;
-    }
+    const nextValidationMessage = validateProductForm({
+      values: form,
+      isEditMode,
+      editingProductId,
+    });
 
-    if (!form.code.trim()) {
-      setValidationMessage("يرجى إدخال كود المنتج.");
-      return;
-    }
-
-    if (isEditMode && !editingProductId) {
-      setValidationMessage("تعذر تحديد المنتج للتعديل.");
+    if (nextValidationMessage) {
+      setValidationMessage(nextValidationMessage);
       return;
     }
 
@@ -342,11 +368,22 @@ export default function NewProductPage() {
         form.taxMode === "none"
           ? 0
           : Math.max(0, Number.parseFloat(form.defaultTaxRate) || 0);
+      const selectedMainCategory =
+        mainCategories.find((category) => String(category.id) === form.mainCategoryId) ?? null;
+      const selectedSubCategory =
+        filteredSubCategories.find((category) => String(category.id) === form.subCategoryId) ??
+        null;
+      const normalizedCategory =
+        selectedSubCategory?.name || selectedMainCategory?.name || form.category.trim() || "-";
 
       const productPayload = {
         code: form.code.trim(),
         name: form.name.trim(),
-        category: form.category.trim() || "-",
+        category: normalizedCategory,
+        mainCategoryId: selectedMainCategory?.id ?? null,
+        mainCategoryName: selectedMainCategory?.name || "-",
+        subCategoryId: selectedSubCategory?.id ?? null,
+        subCategoryName: selectedSubCategory?.name || "-",
         sellingPrice: Math.max(0, Number.parseFloat(form.sellingPrice) || 0),
         purchasePrice: Math.max(0, Number.parseFloat(form.purchasePrice) || 0),
         defaultTaxRate: taxRate,
@@ -359,7 +396,7 @@ export default function NewProductPage() {
         dateAdded: form.dateAdded,
         status: form.status,
         currency: form.currency,
-        unit: form.unit,
+        unit: form.unit as ProductUnit,
         supplierName: form.supplierName.trim() || "-",
         barcode: form.barcode.trim() || createBarcode(),
         taxMode: form.taxMode,
@@ -378,11 +415,11 @@ export default function NewProductPage() {
             ? "صورة حالية"
             : ""
         );
-        setForm(buildFormFromProduct(savedProduct));
+        setForm(buildProductFormStateFromProduct(savedProduct));
       } else {
         setSaveMessage(`تم حفظ المنتج بنجاح: ${savedProduct.name} (${savedProduct.code})`);
         setForm((prev) => ({
-          ...createInitialState(),
+          ...createInitialProductFormState(),
           currency: prev.currency,
         }));
         setIsCodeManuallyEdited(false);
@@ -398,8 +435,10 @@ export default function NewProductPage() {
     }
   };
 
+  const isFormLoading = !isRouteReady || (isEditMode && !editingProductId && !loadError);
+
   return (
-    <div className="min-h-screen w-full bg-slate-100 text-slate-800">
+    <div className="min-h-screen w-full bg-[radial-gradient(circle_at_top_right,rgba(14,165,233,0.12),transparent_28%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] text-slate-900">
       <TopNav currentLabel="المنتجات" />
 
       <div
@@ -407,364 +446,47 @@ export default function NewProductPage() {
         dir="ltr"
       >
         <main className="min-w-0 flex-1 space-y-4" dir="rtl">
-          <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <div className="text-right text-lg font-semibold text-slate-700">
+          <section className="rounded-[32px] border border-slate-200 bg-white px-5 py-6 shadow-[0_24px_80px_-48px_rgba(15,23,42,0.3)] sm:px-6">
+            <p className="text-sm font-semibold tracking-[0.18em] text-sky-700">المنتجات</p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
               {isEditMode ? "تعديل المنتج" : "إضافة منتج جديد"}
-            </div>
-            <Link
-              href="/projects-pages/products"
-              className="rounded-md bg-slate-100 px-3 py-1 text-sm text-slate-600"
-            >
-              رجوع
-            </Link>
-          </div>
+            </h1>
+            <p className="mt-3 text-sm leading-7 text-slate-500 sm:text-base">
+              أعيد تنظيم النموذج إلى سكاشن أوضح وأسرع في المسح البصري، مع الحفاظ على نفس
+              حقول الباكند، ونفس آلية الحفظ، ونفس علاقات المنتج مع التصنيفات والموردين
+              والمخزون.
+            </p>
+          </section>
 
-          {loadError ? (
-            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-              {loadError}
-            </div>
-          ) : null}
-
-          <form onSubmit={handleSubmit} className="grid gap-4 lg:grid-cols-[280px_1fr]">
-            <aside className="space-y-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">العملة</label>
-                <select
-                  value={form.currency}
-                  onChange={(event) => updateField("currency", event.target.value)}
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="OMR">ريال عماني</option>
-                  <option value="SAR">ريال سعودي</option>
-                  <option value="USD">دولار</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">تاريخ الإضافة</label>
-                <input
-                  type="date"
-                  value={form.dateAdded}
-                  onChange={(event) => updateField("dateAdded", event.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">الحالة</label>
-                <select
-                  value={form.status}
-                  onChange={(event) =>
-                    updateField("status", event.target.value as Product["status"])
-                  }
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                >
-                  <option value="متاح">متاح</option>
-                  <option value="غير متاح">غير متاح</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-semibold text-slate-700">صورة المنتج</label>
-
-                <div className="flex h-28 w-full items-center justify-center overflow-hidden rounded-md border border-slate-200 bg-slate-50 p-3">
-                  <img
-                    src={form.imageUrl || FALLBACK_PRODUCT_IMAGE}
-                    alt="صورة المنتج"
-                    className="max-h-full max-w-full object-contain"
-                    onError={(event) => {
-                      event.currentTarget.onerror = null;
-                      event.currentTarget.src = FALLBACK_PRODUCT_IMAGE;
-                      setValidationMessage(
-                        form.imageFile
-                          ? "تم اختيار الصورة، لكن المتصفح الحالي لا يدعم معاينتها. سيتم حفظها إذا قبلها الخادم."
-                          : "تعذر عرض صورة المنتج الحالية."
-                      );
-                    }}
-                  />
-                </div>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept={IMAGE_INPUT_ACCEPT}
-                  className="hidden"
-                  onChange={handleImageChange}
-                  disabled={isSubmitting || isReadingImage}
-                />
-
-                <button
-                  type="button"
-                  onClick={handleImageButtonClick}
-                  disabled={isSubmitting || isReadingImage}
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                >
-                  {selectedImageName ? "تغيير صورة المنتج" : "رفع صورة المنتج"}
-                </button>
-
-                <div className="text-xs text-slate-500">
-                  {selectedImageName || SUPPORTED_IMAGE_HINT}
-                </div>
-
-                {selectedImageName || form.imageUrl ? (
-                  <button
-                    type="button"
-                    onClick={handleRemoveImage}
-                    disabled={isSubmitting || isReadingImage}
-                    className="w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    إزالة الصورة
-                  </button>
-                ) : null}
-              </div>
-            </aside>
-
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">اسم المنتج</label>
-                  <input
-                    value={form.name}
-                    onChange={(event) => handleNameChange(event.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="مثال: قالب ووردبريس"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">كود المنتج</label>
-                  <div className="flex gap-2">
-                    <input
-                      value={form.code}
-                      onChange={(event) => {
-                        setIsCodeManuallyEdited(true);
-                        updateField("code", event.target.value);
-                      }}
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateField("code", createProductCode(form.name));
-                        setIsCodeManuallyEdited(false);
-                      }}
-                      className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
-                    >
-                      توليد تلقائي
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الباركود</label>
-                  <div className="flex gap-2">
-                    <input
-                      value={form.barcode}
-                      onChange={(event) => updateField("barcode", event.target.value)}
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                      placeholder="مثال: 6281000010012"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => updateField("barcode", createBarcode())}
-                      className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600"
-                    >
-                      توليد
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الفئة</label>
-                  <input
-                    value={form.category}
-                    onChange={(event) => updateField("category", event.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    placeholder="مثال: تصميم"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">سعر البيع</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.sellingPrice}
-                    onChange={(event) => updateField("sellingPrice", event.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">
-                    سعر الشراء (تكلفة المنتج)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.purchasePrice}
-                    onChange={(event) => updateField("purchasePrice", event.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">الكمية المتاحة</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={form.quantity}
-                    onChange={(event) => updateField("quantity", event.target.value)}
-                    className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-slate-700">وحدة القياس</label>
-                  <select
-                    value={form.unit}
-                    onChange={(event) => updateField("unit", event.target.value as ProductUnit)}
-                    className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                  >
-                    {PRODUCT_UNITS.map((unit) => (
-                      <option key={unit} value={unit}>
-                        {unit}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="product-stock-alert mt-5 rounded-lg border p-3">
-                <h3 className="product-stock-alert__title text-sm font-bold">تنبيه المخزون</h3>
-                <p className="product-stock-alert__desc mt-1 text-xs">
-                  عند وصول الكمية الحالية إلى حد إعادة الطلب أو أقل، سيظهر تنبيه في لوحة
-                  البيانات.
-                </p>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">
-                      الحد الأدنى للمخزون
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={form.minStockLevel}
-                      onChange={(event) => updateField("minStockLevel", event.target.value)}
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">حد إعادة الطلب</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      value={form.reorderPoint}
-                      onChange={(event) => updateField("reorderPoint", event.target.value)}
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <h3 className="text-sm font-bold text-slate-800">الضريبة الافتراضية</h3>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">نوع الضريبة</label>
-                    <select
-                      value={form.taxMode}
-                      onChange={(event) =>
-                        updateField("taxMode", event.target.value as ProductTaxMode)
-                      }
-                      className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm"
-                    >
-                      {PRODUCT_TAX_MODES.map((mode) => (
-                        <option key={mode.value} value={mode.value}>
-                          {mode.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-sm font-semibold text-slate-700">نسبة الضريبة %</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={form.defaultTaxRate}
-                      disabled={form.taxMode === "none"}
-                      onChange={(event) => updateField("defaultTaxRate", event.target.value)}
-                      className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-5 space-y-2">
-                <label className="text-sm font-semibold text-slate-700">اسم المورد</label>
-                <input
-                  value={form.supplierName}
-                  onChange={(event) => updateField("supplierName", event.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="اكتب اسم المورد"
-                />
-              </div>
-
-              <div className="mt-4 space-y-2">
-                <label className="text-sm font-semibold text-slate-700">الوصف</label>
-                <textarea
-                  rows={4}
-                  value={form.description}
-                  onChange={(event) => updateField("description", event.target.value)}
-                  className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-                  placeholder="وصف اختياري للمنتج"
-                />
-              </div>
-
-              {validationMessage ? (
-                <div className="mt-4 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-                  {validationMessage}
-                </div>
-              ) : null}
-
-              {saveMessage ? (
-                <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
-                  {saveMessage}
-                </div>
-              ) : null}
-
-              <div className="mt-6 flex items-center justify-between">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="rounded-full bg-brand-900 px-8 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-70"
-                >
-                  {isSubmitting
-                    ? isEditMode
-                      ? "جارٍ حفظ التعديلات..."
-                      : "جارٍ حفظ المنتج..."
-                    : isEditMode
-                      ? "حفظ التعديلات"
-                      : "حفظ المنتج"}
-                </button>
-                <Link
-                  href="/projects-pages/products"
-                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-600"
-                >
-                  إلغاء
-                </Link>
-              </div>
-            </section>
-          </form>
+          <ProductForm
+            values={form}
+            isEditMode={isEditMode}
+            isLoading={isFormLoading}
+            isSubmitting={isSubmitting}
+            isReadingImage={isReadingImage}
+            validationMessage={validationMessage}
+            saveMessage={saveMessage}
+            loadError={loadError}
+            referenceError={referenceError}
+            selectedImageName={selectedImageName}
+            mainCategories={mainCategories}
+            filteredSubCategories={filteredSubCategories}
+            supplierOptions={normalizedSupplierOptions}
+            unitOptions={normalizedUnitOptions}
+            fileInputRef={fileInputRef}
+            onSubmit={handleSubmit}
+            onFieldChange={updateField}
+            onNameChange={handleNameChange}
+            onCodeChange={handleCodeChange}
+            onGenerateCode={handleGenerateCode}
+            onGenerateBarcode={handleGenerateBarcode}
+            onMainCategoryChange={handleMainCategoryChange}
+            onSubCategoryChange={handleSubCategoryChange}
+            onImageButtonClick={handleImageButtonClick}
+            onImageChange={handleImageChange}
+            onRemoveImage={handleRemoveImage}
+            onImagePreviewError={handleImagePreviewError}
+          />
         </main>
 
         <Sidebar activeLabel="المنتجات" />

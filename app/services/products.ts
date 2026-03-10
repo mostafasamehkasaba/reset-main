@@ -7,6 +7,10 @@ export type ProductPayload = {
   code: string;
   name: string;
   category: string;
+  mainCategoryId?: number | null;
+  mainCategoryName?: string;
+  subCategoryId?: number | null;
+  subCategoryName?: string;
   sellingPrice: number;
   purchasePrice: number;
   defaultTaxRate: number;
@@ -123,18 +127,19 @@ const toApiImageUrl = (value: string) => {
 };
 
 const normalizeUnit = (value: unknown): ProductUnit => {
-  const normalized = getFirstText(value).toLowerCase();
+  const rawValue = getFirstText(value);
+  const normalized = rawValue.toLowerCase();
 
-  if (normalized === "piece" || normalized === "ظ‚ط·ط¹ط©") return "ظ‚ط·ط¹ط©" as ProductUnit;
-  if (normalized === "carton" || normalized === "ظƒط±طھظˆظ†ط©") return "ظƒط±طھظˆظ†ط©" as ProductUnit;
-  if (normalized === "meter" || normalized === "ظ…طھط±") return "ظ…طھط±" as ProductUnit;
-  if (normalized === "kilo" || normalized === "kilogram" || normalized === "kg" || normalized === "ظƒظٹظ„ظˆ") {
-    return "ظƒظٹظ„ظˆ" as ProductUnit;
+  if (normalized === "piece" || normalized === "قطعة") return "قطعة" as ProductUnit;
+  if (normalized === "carton" || normalized === "كرتونة") return "كرتونة" as ProductUnit;
+  if (normalized === "meter" || normalized === "متر") return "متر" as ProductUnit;
+  if (normalized === "kilo" || normalized === "kilogram" || normalized === "kg" || normalized === "كيلو") {
+    return "كيلو" as ProductUnit;
   }
-  if (normalized === "hour" || normalized === "ط³ط§ط¹ط©") return "ط³ط§ط¹ط©" as ProductUnit;
-  if (normalized === "service" || normalized === "ط®ط¯ظ…ط©") return "ط®ط¯ظ…ط©" as ProductUnit;
+  if (normalized === "hour" || normalized === "ساعة") return "ساعة" as ProductUnit;
+  if (normalized === "service" || normalized === "خدمة") return "خدمة" as ProductUnit;
 
-  return "ظ‚ط·ط¹ط©" as ProductUnit;
+  return rawValue || ("قطعة" as ProductUnit);
 };
 
 const normalizeTaxMode = (value: unknown): ProductTaxMode => {
@@ -169,7 +174,7 @@ const toApiUnit = (value: ProductUnit) => {
   if (value === PRODUCT_UNITS[3]) return "kilo";
   if (value === PRODUCT_UNITS[4]) return "hour";
   if (value === PRODUCT_UNITS[5]) return "service";
-  return "piece";
+  return value.trim() || "piece";
 };
 
 const toApiStatus = (value: Product["status"]) =>
@@ -205,7 +210,29 @@ const normalizeProduct = (input: unknown, index: number): Product => {
     category: getFirstText(
       record.category,
       record.category_name,
+      record.subCategoryName,
+      record.sub_category_name,
+      record.mainCategoryName,
+      record.main_category_name,
       asRecord(record.category)?.name,
+      "-"
+    ),
+    mainCategoryId: Math.floor(
+      getFirstNumber(record.mainCategoryId, record.main_category_id, asRecord(record.main_category)?.id, 0)
+    ) || null,
+    mainCategoryName: getFirstText(
+      record.mainCategoryName,
+      record.main_category_name,
+      asRecord(record.main_category)?.name,
+      "-"
+    ),
+    subCategoryId: Math.floor(
+      getFirstNumber(record.subCategoryId, record.sub_category_id, asRecord(record.sub_category)?.id, 0)
+    ) || null,
+    subCategoryName: getFirstText(
+      record.subCategoryName,
+      record.sub_category_name,
+      asRecord(record.sub_category)?.name,
       "-"
     ),
     sellingPrice: getFirstNumber(record.sellingPrice, record.selling_price, record.price),
@@ -255,8 +282,44 @@ const normalizeCreatedProduct = (input: unknown, fallback: ProductPayload): Prod
     category: getFirstText(
       record.category,
       record.category_name,
+      record.subCategoryName,
+      record.sub_category_name,
+      record.mainCategoryName,
+      record.main_category_name,
       asRecord(record.category)?.name,
       fallback.category,
+      "-"
+    ),
+    mainCategoryId:
+      Math.floor(
+        getFirstNumber(
+          record.mainCategoryId,
+          record.main_category_id,
+          asRecord(record.main_category)?.id,
+          fallback.mainCategoryId ?? 0
+        )
+      ) || null,
+    mainCategoryName: getFirstText(
+      record.mainCategoryName,
+      record.main_category_name,
+      asRecord(record.main_category)?.name,
+      fallback.mainCategoryName,
+      "-"
+    ),
+    subCategoryId:
+      Math.floor(
+        getFirstNumber(
+          record.subCategoryId,
+          record.sub_category_id,
+          asRecord(record.sub_category)?.id,
+          fallback.subCategoryId ?? 0
+        )
+      ) || null,
+    subCategoryName: getFirstText(
+      record.subCategoryName,
+      record.sub_category_name,
+      asRecord(record.sub_category)?.name,
+      fallback.subCategoryName,
       "-"
     ),
     sellingPrice: getFirstNumber(
@@ -367,6 +430,11 @@ const buildRequestBody = (product: ProductPayload) => {
   const apiUnit = toApiUnit(product.unit);
   const apiDefaultTaxType = toApiDefaultTaxType(product.taxMode);
   const apiTaxRate = product.taxMode === "none" ? 0 : product.defaultTaxRate;
+  const normalizedCategory =
+    product.subCategoryName?.trim() ||
+    product.mainCategoryName?.trim() ||
+    product.category.trim() ||
+    "-";
 
   return {
     code: product.code,
@@ -374,8 +442,16 @@ const buildRequestBody = (product: ProductPayload) => {
     sku: product.code,
     name: product.name,
     product_name: product.name,
-    category: product.category,
-    category_name: product.category,
+    category: normalizedCategory,
+    category_name: normalizedCategory,
+    mainCategoryId: product.mainCategoryId ?? null,
+    main_category_id: product.mainCategoryId ?? null,
+    mainCategoryName: product.mainCategoryName || "-",
+    main_category_name: product.mainCategoryName || "-",
+    subCategoryId: product.subCategoryId ?? null,
+    sub_category_id: product.subCategoryId ?? null,
+    subCategoryName: product.subCategoryName || "-",
+    sub_category_name: product.subCategoryName || "-",
     sellingPrice: product.sellingPrice,
     selling_price: product.sellingPrice,
     purchasePrice: product.purchasePrice,
@@ -414,14 +490,27 @@ const buildFormData = (product: ProductPayload) => {
   const apiDefaultTaxType = toApiDefaultTaxType(product.taxMode);
   const apiTaxRate = product.taxMode === "none" ? 0 : product.defaultTaxRate;
   const formData = new FormData();
+  const normalizedCategory =
+    product.subCategoryName?.trim() ||
+    product.mainCategoryName?.trim() ||
+    product.category.trim() ||
+    "-";
 
   formData.set("code", product.code);
   formData.set("product_code", product.code);
   formData.set("sku", product.code);
   formData.set("name", product.name);
   formData.set("product_name", product.name);
-  formData.set("category", product.category);
-  formData.set("category_name", product.category);
+  formData.set("category", normalizedCategory);
+  formData.set("category_name", normalizedCategory);
+  formData.set("mainCategoryId", String(product.mainCategoryId ?? ""));
+  formData.set("main_category_id", String(product.mainCategoryId ?? ""));
+  formData.set("mainCategoryName", product.mainCategoryName || "-");
+  formData.set("main_category_name", product.mainCategoryName || "-");
+  formData.set("subCategoryId", String(product.subCategoryId ?? ""));
+  formData.set("sub_category_id", String(product.subCategoryId ?? ""));
+  formData.set("subCategoryName", product.subCategoryName || "-");
+  formData.set("sub_category_name", product.subCategoryName || "-");
   formData.set("sellingPrice", String(product.sellingPrice));
   formData.set("selling_price", String(product.sellingPrice));
   formData.set("purchasePrice", String(product.purchasePrice));

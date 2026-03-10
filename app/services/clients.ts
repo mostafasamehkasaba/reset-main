@@ -209,6 +209,8 @@ const normalizeClient = (input: unknown, index: number): Client => {
     ),
     internalNotes: getFirstText(record.internalNotes, record.internal_notes, record.notes, "-"),
     currency: getFirstText(record.currency, record.currency_code, "OMR"),
+    createdAt: getFirstText(record.createdAt, record.created_at, record.date_added),
+    updatedAt: getFirstText(record.updatedAt, record.updated_at, record.modified_at),
     invoices: Math.floor(
       getFirstNumber(
         record.invoices,
@@ -322,6 +324,8 @@ const persistClient = (client: Client) => {
 
 const buildClientDraft = (client: CreateClientPayload) => ({
   ...buildRequestBody(client),
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
   invoices: 0,
   due: 0,
   currency: client.currency || "OMR",
@@ -357,6 +361,8 @@ const updateLocalClient = (clientId: number, client: CreateClientPayload) => {
       ...(existingClient || {}),
       ...buildClientDraft(client),
       id: clientId,
+      createdAt: existingClient?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       invoices: existingClient?.invoices ?? 0,
       due: existingClient?.due ?? 0,
       stats: existingClient?.stats ?? {

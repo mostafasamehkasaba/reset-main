@@ -1,16 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { FileText, LogOut, Package, Tag, Truck, Users } from "lucide-react";
+import {
+  ChevronDown,
+  CreditCard,
+  FileText,
+  Package,
+  Plus,
+  Search,
+  Tag,
+  Truck,
+  Users,
+} from "lucide-react";
 import SidebarToggle from "./SidebarToggle";
 import ThemeToggle from "./ThemeToggle";
-import { getStoredAuthUser } from "../lib/auth-session";
-import { LOGIN_PATH } from "../lib/constant";
-import { getErrorMessage } from "../lib/fetcher";
-import { logout } from "../services/auth";
-import type { AuthUser } from "../types";
 
 type TopNavProps = {
   currentLabel: string;
@@ -19,35 +23,63 @@ type TopNavProps = {
   searchPlaceholder?: string;
 };
 
+const quickActions = [
+  {
+    label: "فاتورة جديدة",
+    href: "/invoices/new",
+    icon: FileText,
+  },
+  {
+    label: "تصنيف جديد",
+    href: "/projects-pages/categories/main",
+    icon: Tag,
+  },
+  {
+    label: "عميل جديد",
+    href: "/customers/new",
+    icon: Users,
+  },
+  {
+    label: "مورد جديد",
+    href: "/projects-pages/Suppliers/new",
+    icon: Truck,
+  },
+  {
+    label: "منتج جديد",
+    href: "/products/new",
+    icon: Package,
+  },
+  {
+    label: "وسيلة دفع جديدة",
+    href: "/projects-pages/payment-methods/new",
+    icon: CreditCard,
+  },
+];
+
 export default function TopNav({
   currentLabel,
-  parentLabel = "الرئيسية",
-  actionLabel = "إجراء جديد",
-  searchPlaceholder = "بحث سريع عن العملاء، المنتجات، الفواتير...",
+  parentLabel = "مساحة العمل",
+  actionLabel = "إضافة",
+  searchPlaceholder = "ابحث بسرعة عن العملاء أو الفواتير أو المنتجات...",
 }: TopNavProps) {
-  const router = useRouter();
-  const [now, setNow] = useState(() => new Date());
   const [actionsOpen, setActionsOpen] = useState(false);
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null);
-  const [logoutError, setLogoutError] = useState("");
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const actionsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
     const handlePointer = (event: MouseEvent) => {
-      if (!actionsRef.current) return;
+      if (!actionsRef.current) {
+        return;
+      }
+
       if (!actionsRef.current.contains(event.target as Node)) {
         setActionsOpen(false);
       }
     };
 
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setActionsOpen(false);
+      if (event.key === "Escape") {
+        setActionsOpen(false);
+      }
     };
 
     document.addEventListener("mousedown", handlePointer);
@@ -59,187 +91,88 @@ export default function TopNav({
     };
   }, []);
 
-  useEffect(() => {
-    const syncAuthUser = () => setAuthUser(getStoredAuthUser());
-
-    syncAuthUser();
-    window.addEventListener("storage", syncAuthUser);
-    window.addEventListener("focus", syncAuthUser);
-
-    return () => {
-      window.removeEventListener("storage", syncAuthUser);
-      window.removeEventListener("focus", syncAuthUser);
-    };
-  }, []);
-
-  const handleLogout = async () => {
-    setLogoutError("");
-    setIsLoggingOut(true);
-
-    try {
-      await logout();
-      router.replace(LOGIN_PATH);
-      router.refresh();
-    } catch (error) {
-      setLogoutError(getErrorMessage(error, "تعذر تسجيل الخروج."));
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
-
   return (
-    <header
-      className="app-topnav border-b border-slate-800/80 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-900 text-white shadow-sm"
-      dir="ltr"
-    >
-      <div className="flex h-20 w-full items-center gap-4 px-3 sm:px-4 lg:px-6">
-        <div className="flex items-center gap-3">
-          <div
-            className="app-surface-card flex items-center gap-2 rounded-2xl border px-3 py-2 shadow-inner"
-            dir="rtl"
-          >
-            <div className="h-10 w-10 rounded-xl bg-slate-200-70" />
-            <div className="text-right leading-tight">
-              <p className="text-sm font-semibold text-slate-800">
-                {authUser?.name || authUser?.email || "المستخدم"}
-              </p>
-              <p className="text-xs text-slate-500">
-                {authUser?.role || authUser?.email || "جلسة API نشطة"}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-70"
-            dir="rtl"
-          >
-            <LogOut className="h-4 w-4" />
-            {isLoggingOut ? "جاري الخروج..." : "خروج"}
-          </button>
-
-          <ThemeToggle variant="compact" />
-          <SidebarToggle />
-        </div>
-
-        <div className="flex min-w-0 flex-1 items-center justify-center gap-3">
-          <div className="relative" ref={actionsRef}>
-            <button
-              className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-600"
-              type="button"
-              onClick={() => setActionsOpen((current) => !current)}
-              aria-expanded={actionsOpen}
-              aria-haspopup="menu"
-            >
-              {actionLabel}
-            </button>
-            {actionsOpen && (
-              <div
-                className="absolute left-1/2 top-full z-50 mt-2 w-64 -translate-x-1/2 rounded-2xl border border-slate-200 bg-white p-2 text-sm text-slate-700 shadow-lg"
-                dir="rtl"
-                role="menu"
-              >
-                <Link
-                  href="/projects-pages/invoices/new"
-                  className="flex items-center justify-between rounded-xl px-3 py-2 text-right transition hover:bg-blue-50 hover:text-blue-700"
-                  onClick={() => setActionsOpen(false)}
-                  role="menuitem"
-                >
-                  <span className="flex items-center gap-2">
-                    <FileText className="h-4 w-4 text-blue-600" />
-                    إضافة فاتورة جديدة
-                  </span>
-                </Link>
-                <Link
-                  href="/projects-pages/categories/main"
-                  className="flex items-center justify-between rounded-xl px-3 py-2 text-right transition hover:bg-blue-50 hover:text-blue-700"
-                  onClick={() => setActionsOpen(false)}
-                  role="menuitem"
-                >
-                  <span className="flex items-center gap-2">
-                    <Tag className="h-4 w-4 text-blue-600" />
-                    إضافة تصنيف جديد
-                  </span>
-                </Link>
-                <Link
-                  href="/projects-pages/clients/new"
-                  className="flex items-center justify-between rounded-xl px-3 py-2 text-right transition hover:bg-blue-50 hover:text-blue-700"
-                  onClick={() => setActionsOpen(false)}
-                  role="menuitem"
-                >
-                  <span className="flex items-center gap-2">
-                    <Users className="h-4 w-4 text-blue-600" />
-                    إضافة عميل جديد
-                  </span>
-                </Link>
-                <Link
-                  href="/projects-pages/Suppliers/new"
-                  className="flex items-center justify-between rounded-xl px-3 py-2 text-right transition hover:bg-blue-50 hover:text-blue-700"
-                  onClick={() => setActionsOpen(false)}
-                  role="menuitem"
-                >
-                  <span className="flex items-center gap-2">
-                    <Truck className="h-4 w-4 text-blue-600" />
-                    إضافة مورد جديد
-                  </span>
-                </Link>
-                <Link
-                  href="/projects-pages/products/new"
-                  className="flex items-center justify-between rounded-xl px-3 py-2 text-right transition hover:bg-blue-50 hover:text-blue-700"
-                  onClick={() => setActionsOpen(false)}
-                  role="menuitem"
-                >
-                  <span className="flex items-center gap-2">
-                    <Package className="h-4 w-4 text-blue-600" />
-                    إضافة منتج جديد
-                  </span>
-                </Link>
+    <header className="app-topnav border-b backdrop-blur-xl">
+      <div className="px-3 py-3 sm:px-4 lg:px-6" dir="rtl">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-start justify-between gap-3 xl:flex-1 xl:items-center">
+            <div className="min-w-0">
+              <div className="app-nav-muted flex items-center gap-2 text-[11px] font-medium">
+                <span>{parentLabel}</span>
+                <span>/</span>
+                <span className="app-nav-title">{currentLabel}</span>
               </div>
-            )}
-          </div>
 
-          <div className="app-search w-full max-w-md">
-            <input
-              className="app-search-input h-9 w-full px-2 text-right text-sm outline-none"
-              placeholder={searchPlaceholder}
-              dir="rtl"
-            />
-            <svg
-              aria-hidden="true"
-              viewBox="0 0 24 24"
-              className="app-search-icon h-4 w-4"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3.5-3.5" />
-            </svg>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3" dir="rtl">
-          {logoutError ? (
-            <div className="hidden rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 xl:block">
-              {logoutError}
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <h1 className="app-nav-title truncate text-xl font-semibold tracking-tight sm:text-[1.35rem]">
+                  {currentLabel}
+                </h1>
+                <span className="app-chip hidden sm:inline-flex">لوحة تشغيل مباشرة</span>
+              </div>
             </div>
-          ) : null}
 
-          <div className="app-surface-card rounded-2xl border px-3 py-2 text-xs text-slate-700 shadow-inner">
-            <div className="font-semibold">{now.toLocaleTimeString("ar-EG")}</div>
-            <div className="text-[11px] text-slate-500">
-              {now.toLocaleDateString("ar-EG", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-              })}
+            <div className="flex items-center gap-2 xl:hidden">
+              <ThemeToggle variant="compact" />
+              <SidebarToggle />
             </div>
           </div>
-          <div className="text-sm text-slate-400">{parentLabel}</div>
-          <div className="rounded-2xl bg-blue-500 px-3 py-2 text-sm font-semibold text-white shadow-sm">
-            {currentLabel}
+
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-end xl:flex-none">
+            <label className="relative block w-full lg:w-[340px] xl:w-[400px]">
+              <Search className="app-search-icon pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2" />
+              <input
+                className="app-search-field w-full rounded-2xl border px-11 py-3 text-sm outline-none transition"
+                placeholder={searchPlaceholder}
+              />
+            </label>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="hidden xl:block">
+                <ThemeToggle variant="compact" />
+              </div>
+
+              <div className="relative" ref={actionsRef}>
+                <button
+                  type="button"
+                  onClick={() => setActionsOpen((current) => !current)}
+                  className="app-control-button app-control-button--primary inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold"
+                  aria-expanded={actionsOpen}
+                  aria-haspopup="menu"
+                >
+                  <Plus className="h-4 w-4" />
+                  {actionLabel}
+                  <ChevronDown
+                    className={`h-4 w-4 transition ${actionsOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                {actionsOpen ? (
+                  <div
+                    className="app-menu-panel absolute left-0 top-full z-50 mt-2 w-72 rounded-[24px] border p-2"
+                    role="menu"
+                  >
+                    {quickActions.map((action) => {
+                      const Icon = action.icon;
+
+                      return (
+                        <Link
+                          key={action.href}
+                          href={action.href}
+                          onClick={() => setActionsOpen(false)}
+                          className="app-menu-item flex items-center gap-3 rounded-2xl px-3 py-3 text-sm transition"
+                          role="menuitem"
+                        >
+                          <span className="app-menu-icon flex h-10 w-10 items-center justify-center rounded-xl border">
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          <span className="font-medium">{action.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            </div>
           </div>
         </div>
       </div>

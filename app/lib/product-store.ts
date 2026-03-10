@@ -1,5 +1,5 @@
 export type ProductStatus = "متاح" | "غير متاح";
-export type ProductUnit = "قطعة" | "كرتونة" | "متر" | "كيلو" | "ساعة" | "خدمة";
+export type ProductUnit = string;
 export type ProductTaxMode = "inclusive" | "rate" | "none";
 
 export type Product = {
@@ -7,6 +7,10 @@ export type Product = {
   code: string;
   name: string;
   category: string;
+  mainCategoryId?: number | null;
+  mainCategoryName?: string;
+  subCategoryId?: number | null;
+  subCategoryName?: string;
   sellingPrice: number;
   purchasePrice: number;
   defaultTaxRate: number;
@@ -48,6 +52,23 @@ export const PRODUCT_TAX_MODES: Array<{ value: ProductTaxMode; label: string }> 
   { value: "none", label: "بدون ضريبة" },
 ];
 
+export const normalizeProductStatusLabel = (value: unknown): ProductStatus => {
+  const normalizedValue =
+    typeof value === "string" ? value.trim().toLowerCase() : String(value ?? "").toLowerCase();
+
+  if (
+    normalizedValue === "غير متاح" ||
+    normalizedValue === "unavailable" ||
+    normalizedValue === "inactive" ||
+    normalizedValue === "false" ||
+    normalizedValue === "0"
+  ) {
+    return "غير متاح";
+  }
+
+  return "متاح";
+};
+
 export const defaultProducts: Product[] = [];
 
 const toPositiveNumber = (value: unknown, fallback = 0) => {
@@ -73,6 +94,10 @@ const sanitizeProduct = (raw: Partial<Product>, index: number): Product => {
     code: normalizeText(raw.code, `PRD-${String(index + 1).padStart(3, "0")}`),
     name: normalizeText(raw.name, `منتج ${index + 1}`),
     category: normalizeText(raw.category, "-"),
+    mainCategoryId: Math.floor(toPositiveNumber(raw.mainCategoryId, 0)) || null,
+    mainCategoryName: normalizeText(raw.mainCategoryName, "-"),
+    subCategoryId: Math.floor(toPositiveNumber(raw.subCategoryId, 0)) || null,
+    subCategoryName: normalizeText(raw.subCategoryName, "-"),
     sellingPrice: toPositiveNumber(raw.sellingPrice, 0),
     purchasePrice: toPositiveNumber(raw.purchasePrice, 0),
     defaultTaxRate: toPositiveNumber(raw.defaultTaxRate, 0),
@@ -83,9 +108,9 @@ const sanitizeProduct = (raw: Partial<Product>, index: number): Product => {
     description: normalizeText(raw.description, "-"),
     imageUrl: normalizeText(raw.imageUrl, "/file.svg"),
     dateAdded: normalizeText(raw.dateAdded, new Date().toISOString().slice(0, 10)),
-    status: raw.status === "غير متاح" ? "غير متاح" : "متاح",
+    status: normalizeProductStatusLabel(raw.status),
     currency: normalizeText(raw.currency, "OMR"),
-    unit: PRODUCT_UNITS.includes(raw.unit as ProductUnit) ? (raw.unit as ProductUnit) : "قطعة",
+    unit: normalizeText(raw.unit, "قطعة"),
     supplierName: normalizeText(raw.supplierName, "-"),
     barcode: normalizeText(raw.barcode, "-"),
     taxMode:

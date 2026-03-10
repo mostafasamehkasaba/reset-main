@@ -75,7 +75,7 @@ export default function AuthShell({
             </div>
             <div className="text-right">
               <p className="text-sm font-semibold text-slate-900">فاتورة+</p>
-              <p className="text-xs text-slate-500">Workspace Access</p>
+              <p className="text-xs text-slate-500">بوابة الدخول</p>
             </div>
           </div>
 

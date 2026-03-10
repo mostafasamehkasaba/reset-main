@@ -10,6 +10,7 @@ export type StoredPaymentMethod = {
   currency: string;
   desc: string;
   createdAt: string;
+  updatedAt?: string;
 };
 
 const dataDir = path.join(process.cwd(), "data");
@@ -68,6 +69,37 @@ export const createStoredPaymentMethod = async (input: {
   methods.unshift(method);
   await saveStoredPaymentMethods(methods);
   return method;
+};
+
+export const updateStoredPaymentMethod = async (
+  methodId: number,
+  input: {
+    name: string;
+    type?: string;
+    currency?: string;
+    desc?: string;
+  }
+) => {
+  const methods = await listStoredPaymentMethods();
+  const methodIndex = methods.findIndex((method) => method.id === methodId);
+
+  if (methodIndex === -1) {
+    return null;
+  }
+
+  const currentMethod = methods[methodIndex];
+  const nextMethod: StoredPaymentMethod = {
+    ...currentMethod,
+    name: input.name,
+    type: input.type || "",
+    currency: input.currency || "OMR",
+    desc: input.desc || "-",
+    updatedAt: new Date().toISOString(),
+  };
+
+  methods[methodIndex] = nextMethod;
+  await saveStoredPaymentMethods(methods);
+  return nextMethod;
 };
 
 export const deleteStoredPaymentMethod = async (methodId: number) => {

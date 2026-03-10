@@ -9,6 +9,8 @@ export type PaymentMethod = {
   total: number;
   currency: string;
   desc: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type PaymentMethodPayload = {
@@ -80,6 +82,8 @@ const normalizeMethod = (input: unknown, index: number): PaymentMethod => {
     total: getFirstNumber(record.total, record.total_amount, record.sum),
     currency: getFirstText(record.currency, record.currency_code, "OMR"),
     desc: getFirstText(record.desc, record.description, "-"),
+    createdAt: getFirstText(record.createdAt, record.created_at),
+    updatedAt: getFirstText(record.updatedAt, record.updated_at),
   };
 };
 
@@ -173,6 +177,19 @@ export const listPaymentMethods = async () => {
 export const createPaymentMethod = async (payload: PaymentMethodPayload) => {
   const response = await localApiRequest<unknown>("/api/payment-methods", {
     method: "POST",
+    token: getToken(),
+    body: JSON.stringify(buildRequestBody(payload)),
+  });
+  const record = asRecord(response);
+  return normalizeMethod(record?.data || record?.method || response, 0);
+};
+
+export const updatePaymentMethod = async (
+  methodId: number,
+  payload: PaymentMethodPayload
+) => {
+  const response = await localApiRequest<unknown>(`/api/payment-methods/${methodId}`, {
+    method: "PUT",
     token: getToken(),
     body: JSON.stringify(buildRequestBody(payload)),
   });
