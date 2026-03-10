@@ -678,13 +678,13 @@ html {
 
 :root:not([data-theme]) .app-menu-panel,
 :root[data-theme="light"] .app-menu-panel {
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.9);
   border-color: #dbe2ea;
   box-shadow: 0 30px 60px -35px rgba(15, 23, 42, 0.28);
 }
 
 :root[data-theme="dark"] .app-menu-panel {
-  background: rgba(9, 16, 28, 0.98);
+  background: rgba(9, 16, 28, 0.92);
   border-color: rgba(51, 65, 85, 0.82);
   box-shadow: 0 32px 65px -36px rgba(2, 6, 23, 0.82);
 }
