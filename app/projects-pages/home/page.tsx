@@ -457,10 +457,10 @@ export default function HomePage() {
                   نظرة عامة
                 </div>
                 <h1 className="mt-3 text-[1.9rem] font-semibold leading-tight tracking-tight text-slate-950 sm:text-[2.15rem]">
-                  لوحة قيادة مركزة للأرقام الأهم بدون ازدحام بصري
+                  نظرة واضحة على أهم مؤشرات النشاط
                 </h1>
                 <p className="mt-2 max-w-xl text-sm leading-7 text-slate-500">
-                  المؤشرات الأساسية، الأداء الشهري، وحالة الفواتير في مساحة أسرع قراءة وأكثر تنظيمًا.
+                  تابع الأداء العام، حركة الفواتير، وأهم الأرقام اليومية من مكان واحد.
                 </p>
               </div>
 
