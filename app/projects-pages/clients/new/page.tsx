@@ -300,15 +300,14 @@ function ClientFormPageInner() {
         redirectTimeoutRef.current = window.setTimeout(() => {
           router.push("/customers");
         }, 1200);
-      } else {
         await createClient(payload);
         setSaveMessage("تم حفظ بيانات العميل بنجاح.");
-        setForm((prev) => ({
-          ...initialFormState,
-          country: prev.country,
-          currency: prev.currency,
-          paymentMethod: prev.paymentMethod,
-        }));
+        if (redirectTimeoutRef.current !== null) {
+          window.clearTimeout(redirectTimeoutRef.current);
+        }
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          router.push("/customers");
+        }, 1200);
       }
     } catch (error) {
       setErrorMessage(

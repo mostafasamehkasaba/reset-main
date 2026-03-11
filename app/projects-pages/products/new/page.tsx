@@ -428,17 +428,13 @@ export default function NewProductPage() {
         redirectTimeoutRef.current = window.setTimeout(() => {
           router.push("/products");
         }, 1200);
-      } else {
         setSaveMessage(`تم حفظ المنتج بنجاح: ${savedProduct.name} (${savedProduct.code})`);
-        setForm((prev) => ({
-          ...createInitialProductFormState(),
-          currency: prev.currency,
-        }));
-        setIsCodeManuallyEdited(false);
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
+        if (redirectTimeoutRef.current !== null) {
+          window.clearTimeout(redirectTimeoutRef.current);
         }
-        setSelectedImageName("");
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          router.push("/products");
+        }, 1200);
       }
     } catch (error) {
       setValidationMessage(getErrorMessage(error, "تعذر حفظ المنتج."));

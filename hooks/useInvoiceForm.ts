@@ -1199,20 +1199,13 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
         redirectTimeoutRef.current = window.setTimeout(() => {
           router.push("/invoices");
         }, 1200);
-      } else {
-        persistLastInvoiceSequence(sequence);
-        const nextSequence = sequence + 1;
-        const nextInvoiceNumber = formatInvoiceNumber(nextSequence);
-        setSequence(nextSequence);
-        setNextItemId(2);
-        setForm(
-          getDefaultForm(
-            nextInvoiceNumber,
-            settings.defaultCurrency || form.currency,
-            settings.invoiceNotes || emptySettings.invoiceNotes
-          )
-        );
         setSaveMessage(`تم حفظ الفاتورة ${savedInvoiceNumber} بنجاح.`);
+        if (redirectTimeoutRef.current !== null) {
+          window.clearTimeout(redirectTimeoutRef.current);
+        }
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          router.push("/invoices");
+        }, 1200);
       }
     } catch (error) {
       setSaveError(getErrorMessage(error, "تعذر حفظ الفاتورة."));

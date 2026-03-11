@@ -126,16 +126,12 @@ export function usePaymentMethodForm({ methodId }: UsePaymentMethodFormOptions =
           : "تم حفظ وسيلة الدفع بنجاح."
       );
 
-      if (isEditMode) {
-        if (redirectTimeoutRef.current !== null) {
-          window.clearTimeout(redirectTimeoutRef.current);
-        }
-        redirectTimeoutRef.current = window.setTimeout(() => {
-          router.push("/projects-pages/payment-methods");
-        }, 1200);
-      } else {
-        setValues(createPaymentMethodFormValues());
+      if (redirectTimeoutRef.current !== null) {
+        window.clearTimeout(redirectTimeoutRef.current);
       }
+      redirectTimeoutRef.current = window.setTimeout(() => {
+        router.push("/projects-pages/payment-methods");
+      }, 1200);
 
       return savedMethod;
     } catch (error) {
