@@ -206,6 +206,10 @@ const normalizeCurrencyCode = (value: string) => {
     return normalized;
   }
 
+  if (value.includes("عماني") || value.includes("عمان")) {
+    return "OMR";
+  }
+
   if (value.includes("سعود")) {
     return "SAR";
   }
@@ -1146,6 +1150,17 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
     }
 
     setIsSubmitting(true);
+
+    // Debug: Log currency information
+    console.log("[v0] Invoice currency:", form.currency);
+    console.log("[v0] Selected client:", selectedClient);
+    console.log("[v0] Selected client currency:", selectedClient?.currency);
+    console.log("[v0] Normalized invoice currency:", normalizeCurrencyCode(form.currency));
+    console.log("[v0] Normalized client currency:", selectedClient?.currency ? normalizeCurrencyCode(selectedClient.currency) : "N/A");
+    console.log("[v0] Products in form:", form.items.filter(i => i.kind === "product").map(i => {
+      const p = findInvoiceProductBySelection(products, i.productId);
+      return { name: i.name, productId: i.productId, productCurrency: p?.currency, normalized: p?.currency ? normalizeCurrencyCode(p.currency) : "N/A" };
+    }));
 
     try {
       const savedInvoice = await createInvoice({
