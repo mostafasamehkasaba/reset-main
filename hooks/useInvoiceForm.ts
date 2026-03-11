@@ -11,6 +11,7 @@ import {
   type InvoiceDetails,
 } from "@/app/services/invoices";
 import { listProducts } from "@/app/services/products";
+import { normalizeCurrencyCode, FALLBACK_CURRENCY } from "@/app/lib/currency";
 import {
   emptySettings,
   getSettings,
@@ -37,7 +38,6 @@ import {
 const INVOICE_SEQUENCE_KEY = "reset-main-invoice-sequence-v1";
 const INVOICE_DRAFTS_STORAGE_KEY = "reset-main-invoice-drafts-v2";
 const NEW_DRAFT_KEY = "__new__";
-const FALLBACK_CURRENCY = "OMR";
 
 type EditInvoiceBaseline = {
   clientId: number | null;
@@ -200,30 +200,6 @@ const toDateInputValue = (value: unknown, fallback = "") => {
   return parsed.toISOString().slice(0, 10);
 };
 
-const normalizeCurrencyCode = (value: string) => {
-  const normalized = value.trim().toUpperCase();
-  if (normalized.length === 3 && /^[A-Z]{3}$/.test(normalized)) {
-    return normalized;
-  }
-
-  if (value.includes("سعود")) {
-    return "SAR";
-  }
-
-  if (value.includes("دولار")) {
-    return "USD";
-  }
-
-  if (value.includes("جنيه") || value.includes("مصري")) {
-    return "EGP";
-  }
-
-  if (value.includes("قطر")) {
-    return "QAR";
-  }
-
-  return FALLBACK_CURRENCY;
-};
 
 const normalizePaymentMethod = (value: unknown): InvoiceEditorPaymentMethod => {
   const normalized = toText(value, "").trim().toLowerCase();

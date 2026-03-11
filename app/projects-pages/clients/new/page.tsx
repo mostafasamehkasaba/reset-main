@@ -63,6 +63,8 @@ const currencyOptions = [
   { value: "USD", label: "دولار أمريكي" },
   { value: "EGP", label: "جنيه مصري" },
   { value: "QAR", label: "ريال قطري" },
+  { value: "AED", label: "درهم إماراتي" },
+  { value: "KWD", label: "دينار كويتي" },
 ] as const;
 
 const defaultCountry = countryOptions[0]?.value ?? ("Saudi Arabia" as CountryApiValue);

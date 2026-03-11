@@ -136,6 +136,8 @@ export const invoiceEditorCurrencyOptions: Array<{
   { code: "USD", label: "دولار أمريكي" },
   { code: "EGP", label: "جنيه مصري" },
   { code: "QAR", label: "ريال قطري" },
+  { code: "AED", label: "درهم إماراتي" },
+  { code: "KWD", label: "دينار كويتي" },
 ];
 
 export const invoiceEditorStatusLabels: Record<InvoiceEditorStatus, string> = {

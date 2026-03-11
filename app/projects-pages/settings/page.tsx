@@ -7,7 +7,15 @@ import TopNav from "../../components/TopNav";
 import { getErrorMessage } from "../../lib/fetcher";
 import { emptySettings, getSettings, saveSettings, type AppSettings } from "../../services/settings";
 
-const currencyOptions = ["ريال عماني", "ريال سعودي", "دولار أمريكي", "جنيه مصري"];
+const currencyOptions = [
+  { value: "OMR", label: "ريال عماني" },
+  { value: "SAR", label: "ريال سعودي" },
+  { value: "USD", label: "دولار أمريكي" },
+  { value: "EGP", label: "جنيه مصري" },
+  { value: "QAR", label: "ريال قطري" },
+  { value: "AED", label: "درهم إماراتي" },
+  { value: "KWD", label: "دينار كويتي" },
+];
 const fieldClassName = "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-sky-400 focus:bg-white focus:shadow-[0_0_0_4px_rgba(56,189,248,0.12)] disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500";
 
 const formatUpdatedAt = (value: string | null) => {
@@ -170,7 +178,7 @@ export default function SettingsPage() {
                 <label className="text-sm font-medium text-slate-700">البريد الإلكتروني<input type="email" className={fieldClassName} value={form.siteEmail} onChange={(event) => updateField("siteEmail", event.target.value)} disabled={isReadOnly} /></label>
                 <label className="text-sm font-medium text-slate-700">رقم الهاتف<input type="tel" inputMode="tel" dir="rtl" className={`${fieldClassName} text-right`} value={form.sitePhone} onChange={(event) => updateField("sitePhone", event.target.value)} disabled={isReadOnly} /></label>
                 <label className="text-sm font-medium text-slate-700">العناصر لكل صفحة<input type="number" min="1" className={fieldClassName} value={form.itemsPerPage} onChange={(event) => updateField("itemsPerPage", event.target.value)} disabled={isReadOnly} /></label>
-                <label className="text-sm font-medium text-slate-700">العملة<select className={fieldClassName} value={form.defaultCurrency} onChange={(event) => updateField("defaultCurrency", event.target.value)} disabled={isReadOnly}>{currencyOptions.map((currency) => <option key={currency} value={currency}>{currency}</option>)}</select></label>
+                <label className="text-sm font-medium text-slate-700">العملة<select className={fieldClassName} value={form.defaultCurrency} onChange={(event) => updateField("defaultCurrency", event.target.value)} disabled={isReadOnly}>{currencyOptions.map((currency) => <option key={currency.value} value={currency.value}>{currency.label}</option>)}</select></label>
                 <label className="text-sm font-medium text-slate-700 md:col-span-2">وصف النشاط<input className={fieldClassName} value={form.companyTagline} onChange={(event) => updateField("companyTagline", event.target.value)} disabled={isReadOnly} /></label>
                 <div className="text-sm font-medium text-slate-700 md:col-span-2">المظهر<div className={`${isReadOnly ? "pointer-events-none opacity-60" : ""} mt-3`}><ThemeToggle /></div></div>
               </div>
