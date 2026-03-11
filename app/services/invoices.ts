@@ -1,4 +1,4 @@
-﻿import { getStoredAuthToken } from "../lib/auth-session";
+import { getStoredAuthToken } from "../lib/auth-session";
 import { ApiError, apiRequest } from "../lib/fetcher";
 import {
   getNextNumericId,
@@ -750,6 +750,15 @@ export const createInvoice = async (payload: CreateInvoicePayload) => {
     payload.invoiceNumber.trim() ||
     `INV-${String(fallbackSequence).padStart(4, "0")}`;
   const requestBody = JSON.stringify(buildRequestBody(payload));
+  
+  // Debug: Log the payload being sent
+  console.log("[v0] createInvoice payload:", {
+    currency: payload.currency,
+    clientId: payload.clientId,
+    clientName: payload.clientName,
+    items: payload.items.map(i => ({ name: i.name, productId: i.productId })),
+  });
+  console.log("[v0] Full request body:", requestBody);
 
   const existingInvoice = invoices.find((invoice) => invoice.id === invoiceId) ?? null;
   const token = getStoredAuthToken();
