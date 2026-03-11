@@ -202,7 +202,7 @@ const toDateInputValue = (value: unknown, fallback = "") => {
 
 const normalizeCurrencyCode = (value: string) => {
   const normalized = value.trim().toUpperCase();
-  if (["OMR", "SAR", "USD", "EGP", "QAR"].includes(normalized)) {
+  if (normalized.length === 3 && /^[A-Z]{3}$/.test(normalized)) {
     return normalized;
   }
 
