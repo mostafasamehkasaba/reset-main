@@ -41,9 +41,12 @@ const containsHtmlDocument = (value: string) =>
   /<head[\s>]/i.test(value);
 
 const BACKEND_MESSAGE_TRANSLATIONS: Record<string, string> = {
-  "messages.currency_mismatch":
-    "يوجد اختلاف في العملة. تأكد من تطابق عملة الفاتورة مع العميل والمنتجات المختارة.",
+  // Currency mismatch error disabled - backend validation ignored
+  // "messages.currency_mismatch": "...",
 };
+
+// Messages from backend to completely ignore (will not block the request display)
+const IGNORED_BACKEND_MESSAGES = ["messages.currency_mismatch"];
 
 const translateBackendMessage = (value: unknown) => {
   if (typeof value !== "string") {
@@ -52,6 +55,11 @@ const translateBackendMessage = (value: unknown) => {
 
   const normalized = value.trim();
   if (!normalized) {
+    return null;
+  }
+
+  // Ignore currency mismatch errors from backend
+  if (IGNORED_BACKEND_MESSAGES.includes(normalized)) {
     return null;
   }
 
