@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/app/lib/product-store";
 import { getErrorMessage } from "@/app/lib/fetcher";
-import { normalizeCurrencyCode } from "../app/lib/api-lookups";
 import { listClients, getClient } from "@/app/services/clients";
 import {
   createInvoice,
@@ -1100,39 +1099,6 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
       if (invalidProductItem) {
         const itemLabel = invalidProductItem.name.trim() || `البند رقم ${invalidProductItem.id}`;
         errors.items = `البند "${itemLabel}" غير مرتبط بمنتج صالح. اختر منتجًا من القائمة أو غيّر نوعه إلى خدمة.`;
-      }
-    }
-
-    if (
-      selectedClient?.currency &&
-      normalizeCurrencyCode(selectedClient.currency) !== invoiceCurrency
-    ) {
-      errors.general = `عملة الفاتورة (${invoiceCurrency}) لا تطابق عملة العميل (${normalizeCurrencyCode(
-        selectedClient.currency
-      )}).`;
-    }
-
-    if (!errors.items) {
-      const mismatchedProduct = form.items.find((item) => {
-        if (item.kind !== "product") {
-          return false;
-        }
-
-        const selectedProduct = findInvoiceProductBySelection(products, item.productId);
-        if (!selectedProduct) {
-          return false;
-        }
-
-        return normalizeCurrencyCode(selectedProduct.currency) !== invoiceCurrency;
-      });
-
-      if (mismatchedProduct) {
-        const selectedProduct = findInvoiceProductBySelection(products, mismatchedProduct.productId);
-        if (selectedProduct) {
-          errors.items = `عملة المنتج "${selectedProduct.name}" (${normalizeCurrencyCode(
-            selectedProduct.currency
-          )}) لا تطابق عملة الفاتورة (${invoiceCurrency}).`;
-        }
       }
     }
 
