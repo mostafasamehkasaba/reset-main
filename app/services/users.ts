@@ -150,9 +150,14 @@ const buildRequestBody = (user: UserPayload) => ({
   full_name: user.name,
   email: user.email,
   phone: user.phone,
+  phone_number: user.phone,
+  mobile: user.phone,
   role: denormalizeRole(user.role),
   user_role: denormalizeRole(user.role),
+  role_name: denormalizeRole(user.role),
+  user_type: denormalizeRole(user.role),
   status: denormalizeStatus(user.status),
+  state: denormalizeStatus(user.status),
 });
 
 const buildCreateRequestBody = (user: CreateUserPayload) => ({
