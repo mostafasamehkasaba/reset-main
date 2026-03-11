@@ -201,30 +201,6 @@ const toDateInputValue = (value: unknown, fallback = "") => {
   return parsed.toISOString().slice(0, 10);
 };
 
-const normalizeCurrencyCode = (value: string) => {
-  const normalized = value.trim().toUpperCase();
-  if (normalized.length === 3 && /^[A-Z]{3}$/.test(normalized)) {
-    return normalized;
-  }
-
-  if (value.includes("سعود")) {
-    return "SAR";
-  }
-
-  if (value.includes("دولار")) {
-    return "USD";
-  }
-
-  if (value.includes("جنيه") || value.includes("مصري")) {
-    return "EGP";
-  }
-
-  if (value.includes("قطر")) {
-    return "QAR";
-  }
-
-  return FALLBACK_CURRENCY;
-};
 
 const normalizePaymentMethod = (value: unknown): InvoiceEditorPaymentMethod => {
   const normalized = toText(value, "").trim().toLowerCase();
