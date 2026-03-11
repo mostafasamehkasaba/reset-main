@@ -106,8 +106,8 @@ const todayDate = () => new Date().toISOString().slice(0, 10);
 
 const getInvoiceProductServerId = (product: Product) =>
   typeof product.backendId === "number" &&
-  Number.isFinite(product.backendId) &&
-  product.backendId > 0
+    Number.isFinite(product.backendId) &&
+    product.backendId > 0
     ? Math.trunc(product.backendId)
     : null;
 
@@ -200,6 +200,31 @@ const toDateInputValue = (value: unknown, fallback = "") => {
   }
 
   return parsed.toISOString().slice(0, 10);
+};
+
+const normalizeCurrencyCode = (value: string) => {
+  const normalized = value.trim().toUpperCase();
+  if (normalized.length === 3 && /^[A-Z]{3}$/.test(normalized)) {
+    return normalized;
+  }
+
+  if (value.includes("سعود")) {
+    return "SAR";
+  }
+
+  if (value.includes("دولار")) {
+    return "USD";
+  }
+
+  if (value.includes("جنيه") || value.includes("مصري")) {
+    return "EGP";
+  }
+
+  if (value.includes("قطر")) {
+    return "QAR";
+  }
+
+  return FALLBACK_CURRENCY;
 };
 
 const normalizePaymentMethod = (value: unknown): InvoiceEditorPaymentMethod => {
@@ -422,7 +447,7 @@ const normalizeDraft = (value: unknown): InvoiceEditorDraft | null => {
       customer: {
         selectedClientId:
           typeof customerRecord.selectedClientId === "number" &&
-          Number.isFinite(customerRecord.selectedClientId)
+            Number.isFinite(customerRecord.selectedClientId)
             ? Math.trunc(customerRecord.selectedClientId)
             : null,
         recipientType: normalizeRecipientType(customerRecord.recipientType),
@@ -475,16 +500,16 @@ const hydrateFormFromInvoice = (
   const items: InvoiceEditorItem[] =
     invoice.items.length > 0
       ? invoice.items.map((item, index) => ({
-          id: index + 1,
-          kind: item.itemType === "product" ? "product" : "service",
-          productId:
-            item.itemType === "product" && typeof item.productId === "number"
-              ? item.productId
-              : null,
-          name: item.name,
-          quantity: Math.max(1, item.quantity),
-          price: Math.max(0, item.price),
-        }))
+        id: index + 1,
+        kind: item.itemType === "product" ? "product" : "service",
+        productId:
+          item.itemType === "product" && typeof item.productId === "number"
+            ? item.productId
+            : null,
+        name: item.name,
+        quantity: Math.max(1, item.quantity),
+        price: Math.max(0, item.price),
+      }))
       : [createEmptyInvoiceItem(1)];
 
   return {
@@ -620,30 +645,30 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
 
         const matchedClient = invoiceDetails
           ? findMatchingClient(
-              nextClients,
-              invoiceDetails.clientId ?? null,
-              invoiceDetails.clientName
-            )
+            nextClients,
+            invoiceDetails.clientId ?? null,
+            invoiceDetails.clientName
+          )
           : null;
 
         const hydratedForm = draft?.form
           ? {
-              ...draft.form,
-              customer: mergeCustomerWithClient(draft.form.customer, matchedClient),
-            }
+            ...draft.form,
+            customer: mergeCustomerWithClient(draft.form.customer, matchedClient),
+          }
           : hydrateFormFromInvoice(
-              invoiceDetails!,
-              defaultCurrency,
-              defaultNotes,
-              matchedClient
-            );
+            invoiceDetails!,
+            defaultCurrency,
+            defaultNotes,
+            matchedClient
+          );
 
         setForm(hydratedForm);
         setSequence(
           draft?.sequence ||
-            extractInvoiceSequence(hydratedForm.invoiceNumber) ||
-            extractInvoiceSequence(invoiceId) ||
-            nextSequence
+          extractInvoiceSequence(hydratedForm.invoiceNumber) ||
+          extractInvoiceSequence(invoiceId) ||
+          nextSequence
         );
         setNextItemId(Math.max(draft?.nextItemId || 2, getNextItemId(hydratedForm.items)));
 
@@ -730,7 +755,7 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
       (editBaseline.clientId !== null && selectedClient.id === editBaseline.clientId) ||
       (editBaseline.clientId === null &&
         selectedClient.name.trim().toLowerCase() ===
-          editBaseline.clientName.trim().toLowerCase());
+        editBaseline.clientName.trim().toLowerCase());
 
     return sameClient ? Math.max(0, currentOutstanding - editBaseline.due) : currentOutstanding;
   }, [editBaseline, selectedClient]);
@@ -1080,9 +1105,11 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
 
     if (
       selectedClient?.currency &&
-      selectedClient.currency !== invoiceCurrency
+      normalizeCurrencyCode(selectedClient.currency) !== invoiceCurrency
     ) {
-      errors.general = `عملة الفاتورة (${invoiceCurrency}) لا تطابق عملة العميل (${selectedClient.currency}).`;
+      errors.general = `عملة الفاتورة (${invoiceCurrency}) لا تطابق عملة العميل (${normalizeCurrencyCode(
+        selectedClient.currency
+      )}).`;
     }
 
     if (!errors.items) {
@@ -1096,13 +1123,15 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
           return false;
         }
 
-        return selectedProduct.currency !== invoiceCurrency;
+        return normalizeCurrencyCode(selectedProduct.currency) !== invoiceCurrency;
       });
 
       if (mismatchedProduct) {
         const selectedProduct = findInvoiceProductBySelection(products, mismatchedProduct.productId);
         if (selectedProduct) {
-          errors.items = `عملة المنتج "${selectedProduct.name}" (${selectedProduct.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}).`;
+          errors.items = `عملة المنتج "${selectedProduct.name}" (${normalizeCurrencyCode(
+            selectedProduct.currency
+          )}) لا تطابق عملة الفاتورة (${invoiceCurrency}).`;
         }
       }
     }

@@ -41,10 +41,9 @@ const containsHtmlDocument = (value: string) =>
   /<head[\s>]/i.test(value);
 
 const BACKEND_MESSAGE_TRANSLATIONS: Record<string, string> = {
-  "messages.currency_mismatch": "تعذر حفظ الفاتورة: عملة الفاتورة لا تتطابق مع عملة العميل أو المنتجات.",
+  "messages.currency_mismatch":
+    "يوجد اختلاف في العملة. تأكد من تطابق عملة الفاتورة مع العميل والمنتجات المختارة.",
 };
-
-const IGNORED_BACKEND_MESSAGES: string[] = [];
 
 const translateBackendMessage = (value: unknown) => {
   if (typeof value !== "string") {
@@ -53,10 +52,6 @@ const translateBackendMessage = (value: unknown) => {
 
   const normalized = value.trim();
   if (!normalized) {
-    return null;
-  }
-
-  if (IGNORED_BACKEND_MESSAGES.includes(normalized)) {
     return null;
   }
 
