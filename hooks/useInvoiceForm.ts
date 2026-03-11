@@ -1086,38 +1086,7 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
       }
     }
 
-    if (
-      selectedClient?.currency &&
-      normalizeCurrencyCode(selectedClient.currency) !== invoiceCurrency
-    ) {
-      errors.general = `عملة الفاتورة (${invoiceCurrency}) لا تطابق عملة العميل (${normalizeCurrencyCode(
-        selectedClient.currency
-      )}).`;
-    }
-
-    if (!errors.items) {
-      const mismatchedProduct = form.items.find((item) => {
-        if (item.kind !== "product") {
-          return false;
-        }
-
-        const selectedProduct = findInvoiceProductBySelection(products, item.productId);
-        if (!selectedProduct) {
-          return false;
-        }
-
-        return normalizeCurrencyCode(selectedProduct.currency) !== invoiceCurrency;
-      });
-
-      if (mismatchedProduct) {
-        const selectedProduct = findInvoiceProductBySelection(products, mismatchedProduct.productId);
-        if (selectedProduct) {
-          errors.items = `عملة المنتج "${selectedProduct.name}" (${normalizeCurrencyCode(
-            selectedProduct.currency
-          )}) لا تطابق عملة الفاتورة (${invoiceCurrency}).`;
-        }
-      }
-    }
+    // Currency validation disabled - allowing mixed currencies
 
     if (form.discount > totals.subtotal + totals.tax) {
       errors.discount = "الخصم لا يمكن أن يتجاوز قيمة الفاتورة قبل التحصيل.";
@@ -1150,17 +1119,6 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
     }
 
     setIsSubmitting(true);
-
-    // Debug: Log currency information
-    console.log("[v0] Invoice currency:", form.currency);
-    console.log("[v0] Selected client:", selectedClient);
-    console.log("[v0] Selected client currency:", selectedClient?.currency);
-    console.log("[v0] Normalized invoice currency:", normalizeCurrencyCode(form.currency));
-    console.log("[v0] Normalized client currency:", selectedClient?.currency ? normalizeCurrencyCode(selectedClient.currency) : "N/A");
-    console.log("[v0] Products in form:", form.items.filter(i => i.kind === "product").map(i => {
-      const p = findInvoiceProductBySelection(products, i.productId);
-      return { name: i.name, productId: i.productId, productCurrency: p?.currency, normalized: p?.currency ? normalizeCurrencyCode(p.currency) : "N/A" };
-    }));
 
     try {
       const savedInvoice = await createInvoice({
