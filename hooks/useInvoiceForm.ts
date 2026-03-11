@@ -206,6 +206,10 @@ const normalizeCurrencyCode = (value: string) => {
     return normalized;
   }
 
+  if (value.includes("عماني") || value.includes("عمان")) {
+    return "OMR";
+  }
+
   if (value.includes("سعود")) {
     return "SAR";
   }
@@ -1082,38 +1086,7 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
       }
     }
 
-    if (
-      selectedClient?.currency &&
-      normalizeCurrencyCode(selectedClient.currency) !== invoiceCurrency
-    ) {
-      errors.general = `عملة الفاتورة (${invoiceCurrency}) لا تطابق عملة العميل (${normalizeCurrencyCode(
-        selectedClient.currency
-      )}).`;
-    }
-
-    if (!errors.items) {
-      const mismatchedProduct = form.items.find((item) => {
-        if (item.kind !== "product") {
-          return false;
-        }
-
-        const selectedProduct = findInvoiceProductBySelection(products, item.productId);
-        if (!selectedProduct) {
-          return false;
-        }
-
-        return normalizeCurrencyCode(selectedProduct.currency) !== invoiceCurrency;
-      });
-
-      if (mismatchedProduct) {
-        const selectedProduct = findInvoiceProductBySelection(products, mismatchedProduct.productId);
-        if (selectedProduct) {
-          errors.items = `عملة المنتج "${selectedProduct.name}" (${normalizeCurrencyCode(
-            selectedProduct.currency
-          )}) لا تطابق عملة الفاتورة (${invoiceCurrency}).`;
-        }
-      }
-    }
+    // Currency validation disabled - allowing mixed currencies
 
     if (form.discount > totals.subtotal + totals.tax) {
       errors.discount = "الخصم لا يمكن أن يتجاوز قيمة الفاتورة قبل التحصيل.";

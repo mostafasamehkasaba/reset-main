@@ -1,4 +1,4 @@
-﻿import { getStoredAuthToken } from "../lib/auth-session";
+import { getStoredAuthToken } from "../lib/auth-session";
 import { ApiError, apiRequest } from "../lib/fetcher";
 import {
   getNextNumericId,
