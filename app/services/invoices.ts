@@ -496,6 +496,26 @@ const extractCollection = (payload: unknown): unknown[] => {
 };
 
 const buildRequestBody = (payload: CreateInvoicePayload) => {
+  const requestItems = payload.items.map((item) => ({
+    itemType: item.itemType,
+    item_type: item.itemType,
+    ...(typeof item.productId === "number"
+      ? {
+          productId: item.productId,
+          product_id: item.productId,
+        }
+      : {}),
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    discountType: item.discountType,
+    discount_type: item.discountType,
+    discountValue: item.discountValue,
+    discount_value: item.discountValue,
+    taxRate: item.taxRate,
+    tax_rate: item.taxRate,
+  }));
+
   return {
     invoiceNumber: payload.invoiceNumber,
     invoice_number: payload.invoiceNumber,
@@ -533,8 +553,8 @@ const buildRequestBody = (payload: CreateInvoicePayload) => {
     discount: payload.totals.discount,
     tax: payload.totals.tax,
     total: payload.totals.total,
-    items: payload.items,
-    line_items: payload.items,
+    items: requestItems,
+    line_items: requestItems,
   };
 };
 

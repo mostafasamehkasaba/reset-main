@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import { ProductForm } from "@/components/products/ProductForm";
@@ -27,8 +28,10 @@ import {
 import { validateProductForm } from "@/lib/products/productValidation";
 
 export default function NewProductPage() {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const previewObjectUrlRef = useRef<string | null>(null);
+  const redirectTimeoutRef = useRef<number | null>(null);
   const [form, setForm] = useState<ProductFormState>(createInitialProductFormState);
   const [isCodeManuallyEdited, setIsCodeManuallyEdited] = useState(false);
   const [saveMessage, setSaveMessage] = useState("");
@@ -129,6 +132,9 @@ export default function NewProductPage() {
 
   useEffect(() => {
     return () => {
+      if (redirectTimeoutRef.current !== null) {
+        window.clearTimeout(redirectTimeoutRef.current);
+      }
       revokePreviewObjectUrl();
     };
   }, []);
@@ -416,6 +422,12 @@ export default function NewProductPage() {
             : ""
         );
         setForm(buildProductFormStateFromProduct(savedProduct));
+        if (redirectTimeoutRef.current !== null) {
+          window.clearTimeout(redirectTimeoutRef.current);
+        }
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          router.push("/products");
+        }, 1200);
       } else {
         setSaveMessage(`تم حفظ المنتج بنجاح: ${savedProduct.name} (${savedProduct.code})`);
         setForm((prev) => ({

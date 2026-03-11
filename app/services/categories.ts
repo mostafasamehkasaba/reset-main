@@ -1,5 +1,6 @@
 import { getStoredAuthToken } from "../lib/auth-session";
 import { apiRequest } from "../lib/fetcher";
+import { isRecoverableApiError } from "../lib/local-fallback";
 import type { CategoryStatus, MainCategory, SubCategory } from "../types";
 
 export type MainCategoryPayload = {
@@ -196,11 +197,20 @@ const buildCategoriesResponse = (payload: unknown) => {
 export const listCategories = async () => {
   clearLegacyCategoryCache();
   const token = getStoredAuthToken();
-  const payload = await apiRequest<unknown>("/api/categories", {
-    ...(token ? { token } : {}),
-  });
 
-  return buildCategoriesResponse(payload);
+  try {
+    const payload = await apiRequest<unknown>("/api/categories", {
+      ...(token ? { token } : {}),
+    });
+
+    return buildCategoriesResponse(payload);
+  } catch (error) {
+    if (isRecoverableApiError(error)) {
+      return emptyCategoryState;
+    }
+
+    throw error;
+  }
 };
 
 export const createMainCategory = async (payload: MainCategoryPayload) => {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Product } from "@/app/lib/product-store";
 import { getErrorMessage } from "@/app/lib/fetcher";
 import { listClients } from "@/app/services/clients";
@@ -101,6 +102,34 @@ export type UseInvoiceFormResult = {
 
 const todayDate = () => new Date().toISOString().slice(0, 10);
 
+const getInvoiceProductServerId = (product: Product) =>
+  typeof product.backendId === "number" &&
+  Number.isFinite(product.backendId) &&
+  product.backendId > 0
+    ? Math.trunc(product.backendId)
+    : null;
+
+const getInvoiceProductSelectionValue = (product: Product) =>
+  getInvoiceProductServerId(product) ?? product.id;
+
+const findInvoiceProductBySelection = (products: Product[], productId: number | null) => {
+  if (productId === null) {
+    return null;
+  }
+
+  return (
+    products.find((entry) => getInvoiceProductServerId(entry) === productId) ??
+    products.find(
+      (entry) =>
+        getInvoiceProductServerId(entry) === null && getInvoiceProductSelectionValue(entry) === productId
+    ) ??
+    null
+  );
+};
+
+const getFirstInvoiceProduct = (products: Product[]) =>
+  products[0] ?? null;
+
 const formatInvoiceNumber = (sequence: number) =>
   `INV-${String(Math.max(1, sequence)).padStart(4, "0")}`;
 
@@ -173,7 +202,7 @@ const toDateInputValue = (value: unknown, fallback = "") => {
 
 const normalizeCurrencyCode = (value: string) => {
   const normalized = value.trim().toUpperCase();
-  if (["OMR", "SAR", "USD", "QAR"].includes(normalized)) {
+  if (["OMR", "SAR", "USD", "EGP", "QAR"].includes(normalized)) {
     return normalized;
   }
 
@@ -183,6 +212,10 @@ const normalizeCurrencyCode = (value: string) => {
 
   if (value.includes("دولار")) {
     return "USD";
+  }
+
+  if (value.includes("جنيه") || value.includes("مصري")) {
+    return "EGP";
   }
 
   if (value.includes("قطر")) {
@@ -509,6 +542,8 @@ const getClientOutstanding = (client: Client | null) =>
   client ? Math.max(0, client.due || client.stats.due || 0) : 0;
 
 export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
+  const router = useRouter();
+  const redirectTimeoutRef = useRef<number | null>(null);
   const isEditMode = invoiceId.trim().length > 0;
   const [form, setForm] = useState<InvoiceEditorFormState>(() =>
     getDefaultForm(formatInvoiceNumber(1), FALLBACK_CURRENCY, emptySettings.invoiceNotes)
@@ -527,6 +562,14 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
   const [saveMessage, setSaveMessage] = useState("");
   const [saveError, setSaveError] = useState("");
   const [validationErrors, setValidationErrors] = useState<InvoiceEditorValidationErrors>({});
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current !== null) {
+        window.clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -831,11 +874,11 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
     clearFeedback();
     setValidationErrors((current) => ({ ...current, items: undefined, general: undefined }));
 
-    const firstProduct = products[0];
+    const firstProduct = getFirstInvoiceProduct(products);
     if (!firstProduct) {
       setValidationErrors((current) => ({
         ...current,
-        items: "لا توجد منتجات متاحة حاليًا. أضف بند خدمة أو انتظر تحميل الكتالوج.",
+        items: "لا توجد منتجات متاحة حاليًا. أضف بند خدمة أو انتظر تحميل قائمة المنتجات.",
       }));
       return;
     }
@@ -864,7 +907,7 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
     if (kind === "product" && products.length === 0) {
       setValidationErrors((current) => ({
         ...current,
-        items: "قائمة المنتجات غير متاحة حاليًا. استخدم بند خدمة أو أعد تحميل الصفحة.",
+        items: "لا توجد منتجات متاحة الآن. استخدم بند خدمة أو أعد تحميل الصفحة.",
       }));
       return;
     }
@@ -876,8 +919,9 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
           return item;
         }
 
-        if (kind === "product" && products[0]) {
-          return createInvoiceItemFromProduct(item.id, products[0]);
+        const firstProduct = getFirstInvoiceProduct(products);
+        if (kind === "product" && firstProduct) {
+          return createInvoiceItemFromProduct(item.id, firstProduct);
         }
 
         return createEmptyInvoiceItem(item.id);
@@ -887,13 +931,20 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
 
   const chooseProductForItem = (itemId: number, productIdText: string) => {
     clearFeedback();
+    setValidationErrors((current) => ({ ...current, items: undefined, general: undefined }));
     const productId = Number.parseInt(productIdText, 10);
     if (!Number.isFinite(productId)) {
       return;
     }
 
-    const product = products.find((entry) => entry.id === productId);
+    const product = products.find(
+      (entry) => getInvoiceProductSelectionValue(entry) === productId
+    );
     if (!product) {
+      setValidationErrors((current) => ({
+        ...current,
+        items: "اختر منتجًا صالحًا من القائمة.",
+      }));
       return;
     }
 
@@ -980,6 +1031,7 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
 
   const validateForm = () => {
     const errors: InvoiceEditorValidationErrors = {};
+    const invoiceCurrency = normalizeCurrencyCode(form.currency);
 
     if (form.customer.selectedClientId === null || !form.customer.name.trim()) {
       errors.customer = "اختر عميلًا صالحًا قبل حفظ الفاتورة.";
@@ -1008,15 +1060,59 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
     }
 
     if (
-      form.items.some(
-        (item) =>
-          !item.name.trim() ||
-          item.quantity <= 0 ||
-          item.price < 0 ||
-          (item.kind === "product" && item.productId === null)
-      )
+      !errors.items &&
+      form.items.some((item) => !item.name.trim() || item.quantity <= 0 || item.price < 0)
     ) {
-      errors.items = "راجع أسماء البنود والكميات والأسعار، وتأكد من ربط كل منتج بمنتج فعلي.";
+      errors.items = "أكمل اسم البند والكمية والسعر لكل الصفوف قبل الحفظ.";
+    }
+
+    if (!errors.items) {
+      const invalidProductItem = form.items.find((item) => {
+        if (item.kind !== "product") {
+          return false;
+        }
+
+        const selectedProduct = findInvoiceProductBySelection(products, item.productId);
+        return item.productId === null || !selectedProduct;
+      });
+
+      if (invalidProductItem) {
+        const itemLabel = invalidProductItem.name.trim() || `البند رقم ${invalidProductItem.id}`;
+        errors.items = `البند "${itemLabel}" غير مرتبط بمنتج صالح. اختر منتجًا من القائمة أو غيّر نوعه إلى خدمة.`;
+      }
+    }
+
+    if (
+      selectedClient?.currency &&
+      normalizeCurrencyCode(selectedClient.currency) !== invoiceCurrency
+    ) {
+      errors.general = `عملة الفاتورة (${invoiceCurrency}) لا تطابق عملة العميل (${normalizeCurrencyCode(
+        selectedClient.currency
+      )}).`;
+    }
+
+    if (!errors.items) {
+      const mismatchedProduct = form.items.find((item) => {
+        if (item.kind !== "product") {
+          return false;
+        }
+
+        const selectedProduct = findInvoiceProductBySelection(products, item.productId);
+        if (!selectedProduct) {
+          return false;
+        }
+
+        return normalizeCurrencyCode(selectedProduct.currency) !== invoiceCurrency;
+      });
+
+      if (mismatchedProduct) {
+        const selectedProduct = findInvoiceProductBySelection(products, mismatchedProduct.productId);
+        if (selectedProduct) {
+          errors.items = `عملة المنتج "${selectedProduct.name}" (${normalizeCurrencyCode(
+            selectedProduct.currency
+          )}) لا تطابق عملة الفاتورة (${invoiceCurrency}).`;
+        }
+      }
     }
 
     if (form.discount > totals.subtotal + totals.tax) {
@@ -1072,16 +1168,31 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
           tax: totals.tax,
           total: totals.total,
         },
-        items: form.items.map((item) => ({
-          itemType: item.kind,
-          ...(item.kind === "product" && item.productId !== null ? { productId: item.productId } : {}),
-          name: item.name.trim(),
-          price: item.price,
-          quantity: item.quantity,
-          discountType: "amount",
-          discountValue: 0,
-          taxRate: form.taxRate,
-        })),
+        items: form.items.map((item) => {
+          const selectedProduct =
+            item.kind === "product"
+              ? findInvoiceProductBySelection(products, item.productId)
+              : null;
+          const selectedProductServerId =
+            selectedProduct && item.kind === "product"
+              ? getInvoiceProductServerId(selectedProduct)
+              : null;
+          const requestItemType =
+            item.kind === "product" && selectedProductServerId !== null ? "product" : "service";
+
+          return {
+            itemType: requestItemType,
+            ...(requestItemType === "product" && selectedProductServerId !== null
+              ? { productId: selectedProductServerId }
+              : {}),
+            name: item.name.trim(),
+            price: item.price,
+            quantity: item.quantity,
+            discountType: "amount" as const,
+            discountValue: 0,
+            taxRate: form.taxRate,
+          };
+        }),
       });
 
       const savedInvoiceNumber = savedInvoice?.id || form.invoiceNumber;
@@ -1103,6 +1214,12 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
           invoiceNumber: savedInvoiceNumber,
         }));
         setSaveMessage(`تم حفظ تعديلات الفاتورة ${savedInvoiceNumber} بنجاح.`);
+        if (redirectTimeoutRef.current !== null) {
+          window.clearTimeout(redirectTimeoutRef.current);
+        }
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          router.push("/invoices");
+        }, 1200);
       } else {
         persistLastInvoiceSequence(sequence);
         const nextSequence = sequence + 1;

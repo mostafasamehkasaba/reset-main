@@ -1,7 +1,9 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { ArrowLeft, PencilLine } from "lucide-react";
 import Sidebar from "../../../components/Sidebar";
 import TopNav from "../../../components/TopNav";
 import { getErrorMessage } from "../../../lib/fetcher";
@@ -76,6 +78,24 @@ function ProductViewPageContent() {
           <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="text-right text-lg font-semibold text-slate-700">
               بيانات المنتج
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {product ? (
+                <Link
+                  href={`/products/new?id=${encodeURIComponent(product.id)}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                >
+                  <PencilLine className="h-4 w-4" />
+                  تعديل
+                </Link>
+              ) : null}
+              <Link
+                href="/products"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                رجوع
+              </Link>
             </div>
           </div>
 

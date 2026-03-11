@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Building2,
   CreditCard,
@@ -40,6 +40,7 @@ type ClientFormState = {
   phone: string;
   email: string;
   country: CountryApiValue;
+  currency: string;
   address: string;
   taxNumber: string;
   commercialRegister: string;
@@ -56,6 +57,14 @@ const paymentMethods: Array<{ value: ClientPaymentMethod; label: string }> = [
   { value: "credit", label: "آجل" },
 ];
 
+const currencyOptions = [
+  { value: "OMR", label: "ريال عماني" },
+  { value: "SAR", label: "ريال سعودي" },
+  { value: "USD", label: "دولار أمريكي" },
+  { value: "EGP", label: "جنيه مصري" },
+  { value: "QAR", label: "ريال قطري" },
+] as const;
+
 const defaultCountry = countryOptions[0]?.value ?? ("Saudi Arabia" as CountryApiValue);
 
 const initialFormState: ClientFormState = {
@@ -64,6 +73,7 @@ const initialFormState: ClientFormState = {
   phone: "",
   email: "",
   country: defaultCountry,
+  currency: "OMR",
   address: "",
   taxNumber: "",
   commercialRegister: "",
@@ -105,6 +115,7 @@ const mapClientToFormState = (client: Client): ClientFormState => ({
   phone: client.phone === "-" ? "" : client.phone,
   email: client.email === "-" ? "" : client.email,
   country: normalizeCountrySelection(client.country),
+  currency: client.currency || "OMR",
   address: client.address === "-" ? "" : client.address,
   taxNumber: client.taxNumber === "-" || !client.taxNumber ? "" : client.taxNumber,
   commercialRegister:
@@ -166,9 +177,11 @@ function Feedback({
 }
 
 function ClientFormPageInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const clientId = Number(searchParams.get("id"));
   const isEditMode = Number.isFinite(clientId) && clientId > 0;
+  const redirectTimeoutRef = useRef<number | null>(null);
 
   const [form, setForm] = useState<ClientFormState>(initialFormState);
   const [saveMessage, setSaveMessage] = useState("");
@@ -205,6 +218,14 @@ function ClientFormPageInner() {
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current !== null) {
+        window.clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -258,6 +279,7 @@ function ClientFormPageInner() {
       email: form.email.trim() || undefined,
       phone: form.phone.trim() || undefined,
       country: form.country,
+      currency: form.currency,
       address: form.address.trim() || undefined,
       taxNumber: form.taxNumber.trim() || undefined,
       commercialRegister: form.commercialRegister.trim() || undefined,
@@ -272,12 +294,19 @@ function ClientFormPageInner() {
         const updatedClient = await updateClient(clientId, payload);
         setForm(mapClientToFormState(updatedClient));
         setSaveMessage("تم تحديث بيانات العميل بنجاح.");
+        if (redirectTimeoutRef.current !== null) {
+          window.clearTimeout(redirectTimeoutRef.current);
+        }
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          router.push("/customers");
+        }, 1200);
       } else {
         await createClient(payload);
         setSaveMessage("تم حفظ بيانات العميل بنجاح.");
         setForm((prev) => ({
           ...initialFormState,
           country: prev.country,
+          currency: prev.currency,
           paymentMethod: prev.paymentMethod,
         }));
       }
@@ -315,6 +344,9 @@ function ClientFormPageInner() {
                   {form.country}
                 </span>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
+                  {form.currency}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-600">
                   {selectedPaymentMethodLabel}
                 </span>
                 <Link
@@ -343,6 +375,25 @@ function ClientFormPageInner() {
                 className="h-full"
               >
                 <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <Wallet className="h-4 w-4 text-slate-400" />
+                      العملة
+                    </span>
+                    <select
+                      className={fieldClassName}
+                      value={form.currency}
+                      onChange={(event) => updateField("currency", event.target.value)}
+                      disabled={isLoadingClient || isSubmitting}
+                    >
+                      {currencyOptions.map((currency) => (
+                        <option key={currency.value} value={currency.value}>
+                          {currency.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
                   <label className="space-y-2 md:col-span-2">
                     <span className="text-sm font-semibold text-slate-700">الاسم *</span>
                     <input

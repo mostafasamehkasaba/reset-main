@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getErrorMessage } from "@/app/lib/fetcher";
 import {
   createPaymentMethod,
@@ -18,6 +19,8 @@ type UsePaymentMethodFormOptions = {
 };
 
 export function usePaymentMethodForm({ methodId }: UsePaymentMethodFormOptions = {}) {
+  const router = useRouter();
+  const redirectTimeoutRef = useRef<number | null>(null);
   const [values, setValues] = useState<PaymentMethodFormValues>(
     createPaymentMethodFormValues()
   );
@@ -31,6 +34,14 @@ export function usePaymentMethodForm({ methodId }: UsePaymentMethodFormOptions =
     () => Number.isFinite(methodId) && Number(methodId) > 0,
     [methodId]
   );
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current !== null) {
+        window.clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!isEditMode || !methodId) {
@@ -115,7 +126,14 @@ export function usePaymentMethodForm({ methodId }: UsePaymentMethodFormOptions =
           : "تم حفظ وسيلة الدفع بنجاح."
       );
 
-      if (!isEditMode) {
+      if (isEditMode) {
+        if (redirectTimeoutRef.current !== null) {
+          window.clearTimeout(redirectTimeoutRef.current);
+        }
+        redirectTimeoutRef.current = window.setTimeout(() => {
+          router.push("/projects-pages/payment-methods");
+        }, 1200);
+      } else {
         setValues(createPaymentMethodFormValues());
       }
 

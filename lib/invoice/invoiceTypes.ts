@@ -134,6 +134,7 @@ export const invoiceEditorCurrencyOptions: Array<{
   { code: "OMR", label: "ريال عماني" },
   { code: "SAR", label: "ريال سعودي" },
   { code: "USD", label: "دولار أمريكي" },
+  { code: "EGP", label: "جنيه مصري" },
   { code: "QAR", label: "ريال قطري" },
 ];
 
@@ -168,7 +169,7 @@ export const createInvoiceItemFromProduct = (
 ): InvoiceEditorItem => ({
   id,
   kind: "product",
-  productId: product.id,
+  productId: product.backendId ?? product.id,
   name: product.name,
   quantity: 1,
   price: product.sellingPrice,

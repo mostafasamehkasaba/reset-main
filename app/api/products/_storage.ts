@@ -4,6 +4,7 @@ import { API_BASE_URL } from "../../lib/constant";
 
 export type StoredProduct = {
   id: number;
+  backendId?: number | null;
   code: string;
   name: string;
   category: string;
@@ -138,6 +139,10 @@ const normalizeTaxMode = (value: unknown) => {
 
 export const normalizeStoredProduct = (input: unknown, index = 0): StoredProduct => {
   const record = asRecord(input) || {};
+  const explicitBackendId = Math.max(
+    0,
+    Math.floor(getNumber(record.backendId, record.backend_id))
+  ) || null;
   const minStockLevel = Math.max(
     0,
     Math.floor(getNumber(record.minStockLevel, record.min_stock_level, record.reorder_level))
@@ -152,6 +157,7 @@ export const normalizeStoredProduct = (input: unknown, index = 0): StoredProduct
 
   return {
     id: Math.max(1, Math.floor(getNumber(record.id, record.product_id, Date.now() + index))),
+    backendId: explicitBackendId,
     code: getText(
       record.code,
       record.product_code,
@@ -269,6 +275,29 @@ export const mergeStoredProducts = (
     const productKey = getProductKey(normalized);
 
     if (!productKey || seen.has(productKey)) {
+      if (!productKey) {
+        continue;
+      }
+
+      const existingIndex = merged.findIndex((entry) => getProductKey(entry) === productKey);
+      if (existingIndex === -1) {
+        continue;
+      }
+
+      const existing = merged[existingIndex];
+      if (existing.backendId || !normalized.backendId) {
+        continue;
+      }
+
+      merged[existingIndex] = normalizeStoredProduct(
+        {
+          ...existing,
+          ...normalized,
+          id: existing.id,
+          backendId: normalized.backendId,
+        },
+        existingIndex
+      );
       continue;
     }
 

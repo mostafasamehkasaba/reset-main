@@ -11,6 +11,8 @@ const moneyFormatter = new Intl.NumberFormat("en-US", {
 const formatMoney = (value: number, currency: string) =>
   `${moneyFormatter.format(value)} ${currency}`;
 
+const getProductOptionValue = (product: Product) => product.backendId ?? product.id;
+
 type InvoiceItemsTableProps = {
   items: InvoiceEditorItem[];
   products: Product[];
@@ -93,7 +95,13 @@ export function InvoiceItemsTable({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {items.map((item) => {
+                const hasValidProductSelection =
+                  item.kind !== "product" ||
+                  (item.productId !== null &&
+                    products.some((product) => getProductOptionValue(product) === item.productId));
+
+                return (
                 <tr key={item.id} className="border-t border-slate-200/80 align-top">
                   <td className="px-4 py-4">
                     <select
@@ -112,21 +120,32 @@ export function InvoiceItemsTable({
 
                   <td className="px-4 py-4">
                     {item.kind === "product" ? (
-                      <select
-                        value={item.productId ?? ""}
-                        onChange={(event) => onSelectProduct(item.id, event.target.value)}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
-                      >
-                        {products.length > 0 ? (
-                          products.map((product) => (
-                            <option key={product.id} value={product.id}>
+                      <>
+                        <select
+                          value={hasValidProductSelection ? item.productId ?? "" : ""}
+                          onChange={(event) => onSelectProduct(item.id, event.target.value)}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+                        >
+                          <option value="" disabled>
+                            {products.length > 0 ? "اختر منتجًا" : "لا توجد منتجات"}
+                          </option>
+                          {products.map((product) => (
+                            <option
+                              key={`${product.code}-${product.backendId ?? product.id}`}
+                              value={getProductOptionValue(product)}
+                            >
                               {product.name}
                             </option>
-                          ))
-                        ) : (
-                          <option value="">لا توجد منتجات</option>
-                        )}
-                      </select>
+                          ))}
+                        </select>
+                        {!hasValidProductSelection ? (
+                          <p className="mt-2 text-xs text-rose-600">
+                            {item.name.trim()
+                              ? `البند الحالي (${item.name}) لم يعد مرتبطًا بمنتج صالح. اختر منتجًا من القائمة أو غيّر النوع إلى خدمة.`
+                              : "هذا البند غير مرتبط بمنتج صالح. اختر منتجًا من القائمة أو غيّر النوع إلى خدمة."}
+                          </p>
+                        ) : null}
+                      </>
                     ) : (
                       <input
                         value={item.name}
@@ -176,7 +195,8 @@ export function InvoiceItemsTable({
                     </button>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

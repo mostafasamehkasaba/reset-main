@@ -4,6 +4,7 @@ export type ProductTaxMode = "inclusive" | "rate" | "none";
 
 export type Product = {
   id: number;
+  backendId?: number | null;
   code: string;
   name: string;
   category: string;

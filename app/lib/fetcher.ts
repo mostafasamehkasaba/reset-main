@@ -40,12 +40,30 @@ const containsHtmlDocument = (value: string) =>
   /<body[\s>]/i.test(value) ||
   /<head[\s>]/i.test(value);
 
-const normalizeErrorText = (value: unknown) => {
+const BACKEND_MESSAGE_TRANSLATIONS: Record<string, string> = {
+  "messages.currency_mismatch":
+    "يوجد اختلاف في العملة. تأكد من تطابق عملة الفاتورة مع العميل والمنتجات المختارة.",
+};
+
+const translateBackendMessage = (value: unknown) => {
   if (typeof value !== "string") {
     return null;
   }
 
   const normalized = value.trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return BACKEND_MESSAGE_TRANSLATIONS[normalized] || normalized;
+};
+
+const normalizeErrorText = (value: unknown) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = translateBackendMessage(value);
   if (!normalized || isHtmlDocument(normalized) || containsHtmlDocument(normalized)) {
     return null;
   }
@@ -63,7 +81,7 @@ const normalizeErrorText = (value: unknown) => {
 
 const getMessageFromPayload = (payload: unknown): string | null => {
   if (typeof payload === "string") {
-    const normalized = payload.trim();
+    const normalized = translateBackendMessage(payload);
     if (!normalized || isHtmlDocument(normalized)) {
       return null;
     }
@@ -78,13 +96,13 @@ const getMessageFromPayload = (payload: unknown): string | null => {
     const messages = Object.values(record.errors as Record<string, unknown>)
       .flatMap((value) => {
         if (typeof value === "string" && value.trim()) {
-          return [value.trim()];
+          return [translateBackendMessage(value) || value.trim()];
         }
 
         if (Array.isArray(value)) {
-          return value.filter(
-            (item): item is string => typeof item === "string" && item.trim().length > 0
-          );
+          return value
+            .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+            .map((item) => translateBackendMessage(item) || item.trim());
         }
 
         return [];
@@ -104,7 +122,7 @@ const getMessageFromPayload = (payload: unknown): string | null => {
   }
 
   if (typeof record.message === "string" && record.message.trim()) {
-    return record.message.trim();
+    return translateBackendMessage(record.message) || record.message.trim();
   }
 
   return null;

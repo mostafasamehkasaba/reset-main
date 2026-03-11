@@ -197,9 +197,12 @@ const normalizeImageUrl = (record: Record<string, unknown>, fallback = FALLBACK_
 
 const normalizeProduct = (input: unknown, index: number): Product => {
   const record = asRecord(input) || {};
+  const backendId =
+    Math.floor(getFirstNumber(record.backendId, record.backend_id, 0)) || null;
 
   return {
     id: Math.floor(getFirstNumber(record.id, record.product_id, index + 1)),
+    backendId,
     code: getFirstText(
       record.code,
       record.product_code,
@@ -274,9 +277,12 @@ const normalizeProduct = (input: unknown, index: number): Product => {
 
 const normalizeCreatedProduct = (input: unknown, fallback: ProductPayload): Product => {
   const record = asRecord(input) || {};
+  const backendId =
+    Math.floor(getFirstNumber(record.backendId, record.backend_id, 0)) || null;
 
   return {
     id: Math.floor(getFirstNumber(record.id, record.product_id, Date.now())),
+    backendId,
     code: getFirstText(record.code, record.product_code, record.sku, fallback.code),
     name: getFirstText(record.name, record.product_name, fallback.name),
     category: getFirstText(
@@ -470,7 +476,6 @@ const buildRequestBody = (product: ProductPayload) => {
     description: product.description,
     imageUrl: product.imageUrl,
     image_url: product.imageUrl,
-    image: product.imageUrl,
     dateAdded: product.dateAdded,
     date_added: product.dateAdded,
     status: apiStatus,
@@ -543,7 +548,6 @@ const buildFormData = (product: ProductPayload) => {
   } else {
     formData.set("imageUrl", product.imageUrl);
     formData.set("image_url", product.imageUrl);
-    formData.set("image", product.imageUrl);
   }
 
   return formData;
@@ -688,7 +692,7 @@ export const updateProduct = async (productId: number, product: ProductPayload) 
 
 export const deleteProduct = async (product: Product) => {
   const token = requireToken();
-  const productId = product.id;
+  const productId = product.backendId ?? product.id;
   clearLocalCreatedProductsCache();
 
   await localApiRequest(`/api/products/${encodeURIComponent(productId)}`, {

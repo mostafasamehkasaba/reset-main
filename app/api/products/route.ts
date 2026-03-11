@@ -30,6 +30,23 @@ const getText = (...values: unknown[]) => {
   return "";
 };
 
+const getNumber = (...values: unknown[]) => {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return 0;
+};
+
 const inferImageMimeType = (file: File) => {
   const explicitType = getText(file.type).toLowerCase();
   if (explicitType.startsWith("image/")) {
@@ -233,9 +250,15 @@ const parseMultipartRequest = async (request: Request) => {
 
 const parseJsonRequest = async (request: Request) => {
   const payload = asRecord(await request.json().catch(() => null)) || {};
+  const upstreamPayload = { ...payload };
+
+  if (typeof upstreamPayload.image === "string") {
+    delete upstreamPayload.image;
+  }
+
   return {
     payload,
-    upstreamBody: JSON.stringify(payload),
+    upstreamBody: JSON.stringify(upstreamPayload),
     includeJsonBody: true,
   };
 };
@@ -385,9 +408,20 @@ export async function GET(request: Request) {
       return NextResponse.json({ data: localProducts });
     }
 
-    const remoteProducts = extractCollection(upstreamPayload).map((product, index) =>
-      normalizeStoredProduct(product, index)
-    );
+    const remoteProducts = extractCollection(upstreamPayload).map((product, index) => {
+      const record = asRecord(product) || {};
+      const backendId =
+        Math.max(0, Math.floor(getNumber(record.backendId, record.backend_id, record.id, record.product_id))) ||
+        null;
+
+      return normalizeStoredProduct(
+        {
+          ...record,
+          ...(backendId !== null ? { backend_id: backendId } : {}),
+        },
+        index
+      );
+    });
 
     return NextResponse.json({
       data: mergeStoredProducts(localProducts, remoteProducts),
@@ -463,9 +497,23 @@ export async function POST(request: Request) {
 
     const upstreamRecord = asRecord(upstreamPayload);
     const upstreamProduct = upstreamRecord?.data || upstreamRecord?.product || upstreamPayload;
+    const upstreamProductRecord = asRecord(upstreamProduct) || {};
+    const backendId =
+      Math.max(
+        0,
+        Math.floor(
+          getNumber(
+            upstreamProductRecord.backendId,
+            upstreamProductRecord.backend_id,
+            upstreamProductRecord.id,
+            upstreamProductRecord.product_id
+          )
+        )
+      ) || null;
     const createdProduct = await upsertStoredProduct({
       ...productDraft,
-      ...(asRecord(upstreamProduct) || {}),
+      ...upstreamProductRecord,
+      ...(backendId !== null ? { backend_id: backendId } : {}),
     });
 
     return NextResponse.json({ data: createdProduct }, { status: 201 });

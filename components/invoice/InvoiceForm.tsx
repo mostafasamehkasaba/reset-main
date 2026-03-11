@@ -211,7 +211,7 @@ export function InvoiceForm({ state }: InvoiceFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <section className="overflow-hidden rounded-[34px] border border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f5f9ff_58%,#eff6ff_100%)] shadow-[0_40px_100px_-70px_rgba(15,23,42,0.5)]">
-        <div className="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+        <div className="grid gap-6 px-6 py-6">
           <div className="space-y-4">
             <div className="inline-flex rounded-full border border-sky-100 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-sky-700">
               منشئ الفواتير
@@ -223,35 +223,6 @@ export function InvoiceForm({ state }: InvoiceFormProps) {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Link
-              href="/invoices"
-              className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-            >
-              رجوع
-            </Link>
-            <button
-              type="button"
-              onClick={() => void state.saveDraft()}
-              disabled={state.isSavingDraft || state.isSubmitting}
-              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {state.isSavingDraft ? (
-                <LoaderCircle className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              حفظ كمسودة
-            </button>
-            <button
-              type="submit"
-              disabled={state.isSubmitting || state.isSavingDraft}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {state.isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
-              {state.isEditMode ? "حفظ التعديلات" : "حفظ الفاتورة"}
-            </button>
-          </div>
         </div>
       </section>
 
@@ -496,6 +467,38 @@ export function InvoiceForm({ state }: InvoiceFormProps) {
           className="w-full rounded-[26px] border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-7 text-slate-700 outline-none transition focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
         />
       </SectionCard>
+
+      <section className="rounded-[30px] border border-slate-200 bg-white px-5 py-4 shadow-[0_30px_90px_-60px_rgba(15,23,42,0.42)] sm:px-6">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Link
+            href="/invoices"
+            className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            رجوع
+          </Link>
+          <button
+            type="button"
+            onClick={() => void state.saveDraft()}
+            disabled={state.isSavingDraft || state.isSubmitting}
+            className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {state.isSavingDraft ? (
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            حفظ كمسودة
+          </button>
+          <button
+            type="submit"
+            disabled={state.isSubmitting || state.isSavingDraft}
+            className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {state.isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+            {state.isEditMode ? "حفظ التعديلات" : "حفظ الفاتورة"}
+          </button>
+        </div>
+      </section>
     </form>
   );
 }
