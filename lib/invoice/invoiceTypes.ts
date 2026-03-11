@@ -131,11 +131,11 @@ export const invoiceEditorCurrencyOptions: Array<{
   code: string;
   label: string;
 }> = [
-  { code: "OMR", label: "ريال عماني" },
-  { code: "SAR", label: "ريال سعودي" },
-  { code: "USD", label: "دولار أمريكي" },
-  { code: "EGP", label: "جنيه مصري" },
-  { code: "QAR", label: "ريال قطري" },
+  { code: "ريال عماني", label: "ريال عماني" },
+  { code: "ريال سعودي", label: "ريال سعودي" },
+  { code: "دولار أمريكي", label: "دولار أمريكي" },
+  { code: "جنيه مصري", label: "جنيه مصري" },
+  { code: "ريال قطري", label: "ريال قطري" },
 ];
 
 export const invoiceEditorStatusLabels: Record<InvoiceEditorStatus, string> = {

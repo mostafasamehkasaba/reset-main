@@ -1,5 +1,9 @@
 import { getStoredAuthToken } from "../lib/auth-session";
-import { getCountryLabel, toCountryApiValue } from "../lib/api-lookups";
+import type { Client, ClientRecentInvoice, ClientStats } from "../types";
+import {
+  getCountryLabel,
+  toCountryApiValue,
+} from "../lib/api-lookups";
 import { ApiError, apiRequest } from "../lib/fetcher";
 import {
   getNextNumericId,
@@ -9,7 +13,6 @@ import {
   saveStoredValue,
   upsertByKey,
 } from "../lib/local-fallback";
-import type { Client, ClientRecentInvoice, ClientStats } from "../types";
 
 export type ClientType = "individual" | "company";
 export type ClientPaymentMethod = "cash" | "transfer" | "card" | "credit";
@@ -184,8 +187,11 @@ const normalizeClient = (input: unknown, index: number): Client => {
       ? parsedStats
       : computedStats;
 
+  const backendId = Math.floor(getFirstNumber(record.backendId, record.backend_id, 0)) || undefined;
+
   return {
     id: Math.floor(getFirstNumber(record.id, record.client_id, record.customer_id, index + 1)),
+    backendId,
     name: getFirstText(record.name, record.client_name, record.customer_name, `عميل ${index + 1}`),
     type: getFirstText(record.type, record.client_type, record.customer_type, "individual"),
     email: getFirstText(record.email, record.client_email, record.customer_email, "-"),
@@ -283,19 +289,23 @@ const buildRequestBody = (client: CreateClientPayload) => {
     internal_notes: client.internalNotes,
     internalNotes: client.internalNotes,
     notes: client.internalNotes,
-    currency: client.currency,
-    currency_code: client.currency,
+    currency: client.currency || "OMR",
+    currency_code: client.currency || "OMR",
   };
 };
 
 const getClientKey = (client: Client) =>
-  getFirstText(client.email, `${client.name}-${client.phone}`, String(client.id));
+  String(
+    client.backendId ||
+      client.id ||
+      getFirstText(client.email, `${client.name}-${client.phone}`)
+  );
 
 const LEGACY_SEED_CLIENT_EMAILS = new Set(["info@almadar.test", "sales@alnoor.test"]);
 
 const isLegacySeedClient = (client: Client) => LEGACY_SEED_CLIENT_EMAILS.has(client.email);
 
-const loadLocalClients = () => {
+export const loadLocalClients = () => {
   const clients = loadStoredValue(CLIENTS_STORAGE_KEY, defaultClients, (value) => {
     if (!Array.isArray(value) || value.length === 0) {
       return defaultClients;
@@ -581,7 +591,7 @@ export const createClient = async (client: CreateClientPayload) => {
 export const updateClient = async (clientId: number, client: CreateClientPayload) => {
   try {
     const token = getStoredAuthToken();
-    const payload = await apiRequest<unknown>(`/api/clients/${clientId}`, {
+    const payload = await apiRequest<unknown>(`/api/clients/${encodeURIComponent(clientId)}`, {
       method: "PUT",
       ...(token ? { token } : {}),
       body: JSON.stringify(buildRequestBody(client)),
@@ -612,17 +622,21 @@ export const updateClient = async (clientId: number, client: CreateClientPayload
   }
 };
 
-export const deleteClient = async (clientId: number) => {
+export const deleteClient = async (client: Client) => {
   try {
     const token = getStoredAuthToken();
-    await apiRequest(`/api/clients/${clientId}`, {
+    const apiUrlId = client.backendId ?? client.id;
+    await apiRequest(`/api/clients/${encodeURIComponent(apiUrlId)}`, {
       method: "DELETE",
       ...(token ? { token } : {}),
     });
-    removeLocalClient(clientId);
+    removeLocalClient(client.id);
   } catch (error) {
-    if (isRecoverableApiError(error)) {
-      removeLocalClient(clientId);
+    if (
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && (error.status === 404 || error.status === 405))
+    ) {
+      removeLocalClient(client.id);
       return;
     }
 

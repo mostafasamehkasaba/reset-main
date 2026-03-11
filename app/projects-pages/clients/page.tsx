@@ -142,13 +142,13 @@ export default function ClientsPage() {
     [clientsList]
   );
 
-  const handleDeleteClient = async (clientId: number) => {
+  const handleDeleteClient = async (client: Client) => {
     setDeleteError("");
     setIsDeleting(true);
 
     try {
-      await deleteClient(clientId);
-      setClientsList((prev) => prev.filter((client) => client.id !== clientId));
+      await deleteClient(client);
+      setClientsList((prev) => prev.filter((c) => c.id !== client.id));
       setDeleteClientId(null);
     } catch (error) {
       setDeleteError(getErrorMessage(error, "تعذر حذف العميل."));
@@ -601,8 +601,8 @@ export default function ClientsPage() {
           setDeleteClientId(null);
         }}
         onConfirm={() => {
-          if (deleteClientId === null || isDeleting) return;
-          void handleDeleteClient(deleteClientId);
+          if (!selectedDeleteClient || isDeleting) return;
+          void handleDeleteClient(selectedDeleteClient);
         }}
       />
     </div>

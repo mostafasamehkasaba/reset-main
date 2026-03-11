@@ -113,6 +113,7 @@ export type ClientRecentInvoice = {
 
 export type Client = {
   id: number;
+  backendId?: number;
   name: string;
   type?: string;
   email: string;

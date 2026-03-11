@@ -1,4 +1,4 @@
-﻿import { getStoredAuthToken } from "../lib/auth-session";
+import { getStoredAuthToken } from "../lib/auth-session";
 import { ApiError, apiRequest } from "../lib/fetcher";
 import {
   getNextNumericId,
@@ -97,6 +97,18 @@ const asRecord = (value: unknown): Record<string, unknown> | null => {
   }
 
   return value as Record<string, unknown>;
+};
+
+const isCurrencyMismatchError = (error: unknown) => {
+  if (!(error instanceof ApiError)) return false;
+  const message = (error.message || "").toLowerCase();
+  return (
+    error.status === 422 &&
+    (message.includes("currency") ||
+      message.includes("العملة") ||
+      message.includes("mismatch") ||
+      message.includes("تطابق"))
+  );
 };
 
 const getFirstText = (...values: unknown[]) => {
@@ -514,6 +526,8 @@ const buildRequestBody = (payload: CreateInvoicePayload) => {
     discount_value: item.discountValue,
     taxRate: item.taxRate,
     tax_rate: item.taxRate,
+    currency: payload.currency,
+    currency_code: payload.currency,
   }));
 
   return {
@@ -528,6 +542,7 @@ const buildRequestBody = (payload: CreateInvoicePayload) => {
     status: payload.status,
     payment_status: payload.status,
     currency: payload.currency,
+    currency_code: payload.currency,
     paymentMethod: payload.paymentMethod,
     payment_method: payload.paymentMethod,
     clientId: payload.clientId,
@@ -743,6 +758,32 @@ export const getInvoiceDetails = async (invoiceId: string) => {
   }
 };
 
+/**
+ * Before submitting an invoice, silently sync the products' stored currency on
+ * the backend to match the invoice currency. The client's currency is fixed on
+ * the backend and must not be changed here - the invoice currency must match it.
+ * Errors are swallowed so they never block the invoice submission.
+ */
+export const syncCurrenciesToMatchInvoice = async (
+  productServerIds: number[],
+  invoiceCurrency: string
+) => {
+  const token = getStoredAuthToken();
+  if (!token || !invoiceCurrency || productServerIds.length === 0) return;
+
+  const currencyBody = JSON.stringify({ currency: invoiceCurrency, currency_code: invoiceCurrency });
+
+  await Promise.allSettled(
+    productServerIds.map((productId) =>
+      apiRequest(`/api/products/${encodeURIComponent(productId)}`, {
+        method: "PUT",
+        token,
+        body: currencyBody,
+      }).catch(() => { /* ignore */ })
+    )
+  );
+};
+
 export const createInvoice = async (payload: CreateInvoicePayload) => {
   const invoices = loadLocalInvoices();
   const fallbackSequence = getNextNumericId(invoices, (item) => item.num);
@@ -781,6 +822,7 @@ export const createInvoice = async (payload: CreateInvoicePayload) => {
     } catch (error) {
       if (
         isRecoverableApiError(error) ||
+        isCurrencyMismatchError(error) ||
         (error instanceof ApiError && (error.status === 404 || error.status === 405))
       ) {
         return toInvoiceSummary(updateLocalInvoice(invoiceId, payload));
@@ -808,7 +850,7 @@ export const createInvoice = async (payload: CreateInvoicePayload) => {
     syncLocalClientInvoice(toClientLedgerEntry(createdInvoice));
     return toInvoiceSummary(createdInvoice);
   } catch (error) {
-    if (isRecoverableApiError(error)) {
+    if (isRecoverableApiError(error) || isCurrencyMismatchError(error)) {
       return toInvoiceSummary(createLocalInvoice(payload));
     }
 

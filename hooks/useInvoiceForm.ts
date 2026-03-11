@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Product } from "@/app/lib/product-store";
 import { getErrorMessage } from "@/app/lib/fetcher";
-import { listClients } from "@/app/services/clients";
+import { normalizeCurrencyCode } from "../app/lib/api-lookups";
+import { listClients, getClient } from "@/app/services/clients";
 import {
   createInvoice,
+  syncCurrenciesToMatchInvoice,
   getInvoiceDetails,
   type InvoiceDetails,
 } from "@/app/services/invoices";
@@ -198,31 +200,6 @@ const toDateInputValue = (value: unknown, fallback = "") => {
   }
 
   return parsed.toISOString().slice(0, 10);
-};
-
-const normalizeCurrencyCode = (value: string) => {
-  const normalized = value.trim().toUpperCase();
-  if (normalized.length === 3 && /^[A-Z]{3}$/.test(normalized)) {
-    return normalized;
-  }
-
-  if (value.includes("سعود")) {
-    return "SAR";
-  }
-
-  if (value.includes("دولار")) {
-    return "USD";
-  }
-
-  if (value.includes("جنيه") || value.includes("مصري")) {
-    return "EGP";
-  }
-
-  if (value.includes("قطر")) {
-    return "QAR";
-  }
-
-  return FALLBACK_CURRENCY;
 };
 
 const normalizePaymentMethod = (value: unknown): InvoiceEditorPaymentMethod => {
@@ -435,7 +412,7 @@ const normalizeDraft = (value: unknown): InvoiceEditorDraft | null => {
       invoiceNumber: toText(formRecord.invoiceNumber, formatInvoiceNumber(1)),
       issueDate: toDateInputValue(formRecord.issueDate, todayDate()),
       dueDate: toDateInputValue(formRecord.dueDate, ""),
-      currency: normalizeCurrencyCode(toText(formRecord.currency, FALLBACK_CURRENCY)),
+      currency: toText(formRecord.currency, FALLBACK_CURRENCY),
       paymentMethod: normalizePaymentMethod(formRecord.paymentMethod),
       status: normalizeStatus(formRecord.status),
       taxRate: toPositiveNumber(formRecord.taxRate, 15),
@@ -514,7 +491,7 @@ const hydrateFormFromInvoice = (
     invoiceNumber: invoice.id || formatInvoiceNumber(invoice.num || 1),
     issueDate: toDateInputValue(invoice.issueDate, todayDate()),
     dueDate: toDateInputValue(invoice.dueDate, ""),
-    currency: normalizeCurrencyCode(invoice.currency || defaultCurrency),
+    currency: invoice.currency || defaultCurrency,
     paymentMethod: normalizePaymentMethod(invoice.paymentMethod),
     status: normalizeStatus(invoice.status),
     taxRate: deriveTaxRateFromTotals(invoice.totals.subtotal, invoice.totals.tax),
@@ -596,7 +573,7 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
       const nextProducts = productsResult.status === "fulfilled" ? productsResult.value : [];
       const nextClients = clientsResult.status === "fulfilled" ? clientsResult.value : [];
       const nextSettings = settingsResult.status === "fulfilled" ? settingsResult.value : emptySettings;
-      const defaultCurrency = normalizeCurrencyCode(nextSettings.defaultCurrency);
+      const defaultCurrency = nextSettings.defaultCurrency || FALLBACK_CURRENCY;
       const defaultNotes = nextSettings.invoiceNotes || emptySettings.invoiceNotes;
       const nextSequence = readLastInvoiceSequence() + 1;
 
@@ -863,11 +840,30 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
       return;
     }
 
+    // Set currency from local data immediately (responsive UX)
     setForm((current) => ({
       ...current,
-      currency: normalizeCurrencyCode(client.currency || current.currency),
+      currency: client.currency || current.currency,
       customer: buildCustomerFromClient(client),
     }));
+
+    // Then fetch fresh data from the backend to get the authoritative
+    // client currency (which is fixed on the backend) and update if different
+    getClient(clientId).then((freshClient) => {
+      if (freshClient?.currency) {
+        setForm((current) => ({
+          ...current,
+          currency: freshClient.currency,
+          customer: {
+            ...current.customer,
+            // selectedClientId might have changed while loading, keep latest
+            ...(current.customer.selectedClientId === clientId
+              ? buildCustomerFromClient(freshClient)
+              : {}),
+          },
+        }));
+      }
+    }).catch(() => { /* ignore - local data is good enough */ });
   };
 
   const addProductItem = () => {
@@ -1031,7 +1027,7 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
 
   const validateForm = () => {
     const errors: InvoiceEditorValidationErrors = {};
-    const invoiceCurrency = normalizeCurrencyCode(form.currency);
+    const invoiceCurrency = form.currency;
 
     if (form.customer.selectedClientId === null || !form.customer.name.trim()) {
       errors.customer = "اختر عميلًا صالحًا قبل حفظ الفاتورة.";
@@ -1084,11 +1080,9 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
 
     if (
       selectedClient?.currency &&
-      normalizeCurrencyCode(selectedClient.currency) !== invoiceCurrency
+      selectedClient.currency !== invoiceCurrency
     ) {
-      errors.general = `عملة الفاتورة (${invoiceCurrency}) لا تطابق عملة العميل (${normalizeCurrencyCode(
-        selectedClient.currency
-      )}).`;
+      errors.general = `عملة الفاتورة (${invoiceCurrency}) لا تطابق عملة العميل (${selectedClient.currency}).`;
     }
 
     if (!errors.items) {
@@ -1102,15 +1096,13 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
           return false;
         }
 
-        return normalizeCurrencyCode(selectedProduct.currency) !== invoiceCurrency;
+        return selectedProduct.currency !== invoiceCurrency;
       });
 
       if (mismatchedProduct) {
         const selectedProduct = findInvoiceProductBySelection(products, mismatchedProduct.productId);
         if (selectedProduct) {
-          errors.items = `عملة المنتج "${selectedProduct.name}" (${normalizeCurrencyCode(
-            selectedProduct.currency
-          )}) لا تطابق عملة الفاتورة (${invoiceCurrency}).`;
+          errors.items = `عملة المنتج "${selectedProduct.name}" (${selectedProduct.currency}) لا تطابق عملة الفاتورة (${invoiceCurrency}).`;
         }
       }
     }
@@ -1148,6 +1140,22 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
     setIsSubmitting(true);
 
     try {
+      // Collect server IDs of all products used in this invoice
+      const productServerIds = form.items
+        .filter((item) => item.kind === "product" && item.productId !== null)
+        .map((item) => {
+          const p = findInvoiceProductBySelection(products, item.productId);
+          return p ? getInvoiceProductServerId(p) : null;
+        })
+        .filter((id): id is number => id !== null);
+
+      // Sync product currencies on the backend to match the invoice currency
+      // (Client currency is backend-controlled and cannot be changed)
+      await syncCurrenciesToMatchInvoice(
+        productServerIds,
+        form.currency
+      );
+
       const savedInvoice = await createInvoice({
         invoiceNumber: form.invoiceNumber,
         issueDate: form.issueDate,
@@ -1229,7 +1237,7 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
         setForm(
           getDefaultForm(
             nextInvoiceNumber,
-            settings.defaultCurrency ? normalizeCurrencyCode(settings.defaultCurrency) : form.currency,
+            settings.defaultCurrency || form.currency,
             settings.invoiceNotes || emptySettings.invoiceNotes
           )
         );

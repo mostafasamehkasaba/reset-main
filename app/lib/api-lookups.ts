@@ -121,3 +121,17 @@ export const toSupplierStatusApiValue = (value: unknown): SupplierStatusApiValue
 export const getSupplierStatusLabel = (value: unknown): SupplierStatus => {
   return supplierStatusLabelByValue[toSupplierStatusApiValue(value)];
 };
+
+export const normalizeCurrencyCode = (value: string | undefined | null) => {
+  const normalized = (value || "").trim().toUpperCase();
+  if (normalized.length === 3 && /^[A-Z]{3}$/.test(normalized)) {
+    return normalized;
+  }
+
+  if (normalized.includes("سعود")) return "SAR";
+  if (normalized.includes("دولار")) return "USD";
+  if (normalized.includes("جنيه") || normalized.includes("مصر")) return "EGP";
+  if (normalized.includes("قطر")) return "QAR";
+
+  return "OMR";
+};

@@ -41,9 +41,10 @@ const containsHtmlDocument = (value: string) =>
   /<head[\s>]/i.test(value);
 
 const BACKEND_MESSAGE_TRANSLATIONS: Record<string, string> = {
-  "messages.currency_mismatch":
-    "يوجد اختلاف في العملة. تأكد من تطابق عملة الفاتورة مع العميل والمنتجات المختارة.",
+  "messages.currency_mismatch": "تعذر حفظ الفاتورة: عملة الفاتورة لا تتطابق مع عملة العميل أو المنتجات.",
 };
+
+const IGNORED_BACKEND_MESSAGES: string[] = [];
 
 const translateBackendMessage = (value: unknown) => {
   if (typeof value !== "string") {
@@ -55,9 +56,12 @@ const translateBackendMessage = (value: unknown) => {
     return null;
   }
 
+  if (IGNORED_BACKEND_MESSAGES.includes(normalized)) {
+    return null;
+  }
+
   return BACKEND_MESSAGE_TRANSLATIONS[normalized] || normalized;
 };
-
 const normalizeErrorText = (value: unknown) => {
   if (typeof value !== "string") {
     return null;
@@ -138,11 +142,17 @@ export const getErrorMessage = (
   fallback = "حدث خطأ غير متوقع. حاول مرة أخرى."
 ) => {
   if (error instanceof ApiError) {
-    return normalizeErrorText(error.message) || fallback;
+    const norm = normalizeErrorText(error.message);
+    return norm ? norm : (error.message || fallback);
   }
 
   if (error instanceof Error) {
-    return normalizeErrorText(error.message) || fallback;
+    const norm = normalizeErrorText(error.message);
+    return norm ? norm : (error.message || fallback);
+  }
+
+  if (typeof error === "string") {
+    return error.trim() || fallback;
   }
 
   return fallback;
@@ -169,6 +179,7 @@ export async function apiRequest<T>(
   let response: Response;
 
   try {
+    console.log("API Request:", requestUrl, { body, headers: Object.fromEntries(normalizedHeaders.entries()) });
     response = await fetch(requestUrl, {
       ...restOptions,
       body,

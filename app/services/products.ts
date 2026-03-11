@@ -1,4 +1,4 @@
-﻿import { getStoredAuthToken } from "../lib/auth-session";
+import { getStoredAuthToken } from "../lib/auth-session";
 import { API_BASE_URL } from "../lib/constant";
 import { ApiError } from "../lib/fetcher";
 import { PRODUCT_UNITS, type Product, type ProductTaxMode, type ProductUnit } from "../lib/product-store";
