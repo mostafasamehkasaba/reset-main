@@ -1186,11 +1186,14 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
               ? { productId: selectedProductServerId }
               : {}),
             name: item.name.trim(),
+            unit_price: item.price || 0,
             price: item.price,
             quantity: item.quantity,
             discountType: "amount" as const,
             discountValue: 0,
-            taxRate: form.taxRate,
+            tax_type: "exclusive",
+            taxRate:form.taxRate,
+            
           };
         }),
       });

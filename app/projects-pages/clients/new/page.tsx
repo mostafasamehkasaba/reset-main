@@ -375,24 +375,7 @@ function ClientFormPageInner() {
                 className="h-full"
               >
                 <div className="grid gap-4 md:grid-cols-2">
-                  <label className="space-y-2">
-                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
-                      <Wallet className="h-4 w-4 text-slate-400" />
-                      العملة
-                    </span>
-                    <select
-                      className={fieldClassName}
-                      value={form.currency}
-                      onChange={(event) => updateField("currency", event.target.value)}
-                      disabled={isLoadingClient || isSubmitting}
-                    >
-                      {currencyOptions.map((currency) => (
-                        <option key={currency.value} value={currency.value}>
-                          {currency.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  
 
                   <label className="space-y-2 md:col-span-2">
                     <span className="text-sm font-semibold text-slate-700">الاسم *</span>
@@ -573,6 +556,24 @@ function ClientFormPageInner() {
                       {paymentMethods.map((paymentMethod) => (
                         <option key={paymentMethod.value} value={paymentMethod.value}>
                           {paymentMethod.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-2">
+                    <span className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700">
+                      <Wallet className="h-4 w-4 text-slate-400" />
+                      العملة
+                    </span>
+                    <select
+                      className={fieldClassName}
+                      value={form.currency}
+                      onChange={(event) => updateField("currency", event.target.value)}
+                      disabled={isLoadingClient || isSubmitting}
+                    >
+                      {currencyOptions.map((currency) => (
+                        <option key={currency.value} value={currency.value}>
+                          {currency.label}
                         </option>
                       ))}
                     </select>
