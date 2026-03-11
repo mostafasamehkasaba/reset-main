@@ -202,7 +202,7 @@ const toDateInputValue = (value: unknown, fallback = "") => {
 
 const normalizeCurrencyCode = (value: string) => {
   const normalized = value.trim().toUpperCase();
-  if (["OMR", "SAR", "USD", "EGP", "QAR"].includes(normalized)) {
+  if (normalized.length === 3 && /^[A-Z]{3}$/.test(normalized)) {
     return normalized;
   }
 
@@ -1186,14 +1186,11 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
               ? { productId: selectedProductServerId }
               : {}),
             name: item.name.trim(),
-            unit_price: item.price || 0,
             price: item.price,
             quantity: item.quantity,
             discountType: "amount" as const,
             discountValue: 0,
-            tax_type: "exclusive",
-            taxRate:form.taxRate,
-            
+            taxRate: form.taxRate,
           };
         }),
       });
