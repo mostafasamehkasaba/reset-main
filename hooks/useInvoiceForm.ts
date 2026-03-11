@@ -24,6 +24,7 @@ import {
 import {
   createEmptyInvoiceItem,
   createInvoiceItemFromProduct,
+  invoiceEditorCurrencyOptions,
   type InvoiceEditorCustomer,
   type InvoiceEditorDraft,
   type InvoiceEditorFormState,
@@ -38,6 +39,7 @@ const INVOICE_SEQUENCE_KEY = "reset-main-invoice-sequence-v1";
 const INVOICE_DRAFTS_STORAGE_KEY = "reset-main-invoice-drafts-v2";
 const NEW_DRAFT_KEY = "__new__";
 const FALLBACK_CURRENCY = "OMR";
+const SUPPORTED_CURRENCIES = invoiceEditorCurrencyOptions.map((opt) => opt.code);
 
 type EditInvoiceBaseline = {
   clientId: number | null;
@@ -201,9 +203,9 @@ const toDateInputValue = (value: unknown, fallback = "") => {
 };
 
 const normalizeCurrencyCode = (value: string) => {
-  const normalized = value.trim().toUpperCase();
-  if (["OMR", "SAR", "USD", "EGP", "QAR"].includes(normalized)) {
-    return normalized;
+  const trimmed = value.trim().toUpperCase();
+  if (SUPPORTED_CURRENCIES.includes(trimmed)) {
+    return trimmed;
   }
 
   if (value.includes("سعود")) {
@@ -222,7 +224,7 @@ const normalizeCurrencyCode = (value: string) => {
     return "QAR";
   }
 
-  return FALLBACK_CURRENCY;
+  return trimmed || FALLBACK_CURRENCY;
 };
 
 const normalizePaymentMethod = (value: unknown): InvoiceEditorPaymentMethod => {
@@ -838,6 +840,7 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
       creditLimit: undefined,
       taxNumber: undefined,
       commercialRegister: undefined,
+      general: undefined,
     }));
 
     const clientId = Number.parseInt(clientIdText, 10);
@@ -863,11 +866,16 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
       return;
     }
 
-    setForm((current) => ({
-      ...current,
-      currency: normalizeCurrencyCode(client.currency || current.currency),
-      customer: buildCustomerFromClient(client),
-    }));
+    setForm((current) => {
+      const normalizedClientCurrency = normalizeCurrencyCode(client.currency || "");
+      const isSupported = SUPPORTED_CURRENCIES.includes(normalizedClientCurrency);
+
+      return {
+        ...current,
+        currency: isSupported ? normalizedClientCurrency : current.currency,
+        customer: buildCustomerFromClient(client),
+      };
+    });
   };
 
   const addProductItem = () => {
