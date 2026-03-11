@@ -133,14 +133,26 @@ const extractCollection = (payload: unknown): unknown[] => {
   return [];
 };
 
+const denormalizeRole = (role: UserRole): string => {
+  if (role === "مدير") return "admin";
+  if (role === "محاسب") return "accountant";
+  if (role === "مشاهدة فقط") return "viewer";
+  return "accountant";
+};
+
+const denormalizeStatus = (status: UserStatus): string => {
+  if (status === "معلّق") return "inactive";
+  return "active";
+};
+
 const buildRequestBody = (user: UserPayload) => ({
   name: user.name,
   full_name: user.name,
   email: user.email,
   phone: user.phone,
-  role: user.role,
-  user_role: user.role,
-  status: user.status,
+  role: denormalizeRole(user.role),
+  user_role: denormalizeRole(user.role),
+  status: denormalizeStatus(user.status),
 });
 
 const buildCreateRequestBody = (user: CreateUserPayload) => ({
@@ -254,11 +266,20 @@ export const listUsers = async () => {
 };
 
 export const createUser = async (payload: CreateUserPayload) => {
+  const registrationBody = {
+    ...buildCreateRequestBody(payload),
+    role: denormalizeRole(payload.role),
+    status: denormalizeStatus(payload.status),
+  };
+
   try {
+    console.log("[UsersService] Attempting registration:", registrationBody);
     const response = await apiRequest<unknown>("/api/register", {
       method: "POST",
-      body: JSON.stringify(buildCreateRequestBody(payload)),
+      body: JSON.stringify(registrationBody),
     });
+    console.log("[UsersService] Registration success:", response);
+
     const record = asRecord(response);
     const createdUser = mergeCreatedUser(
       normalizeUser(record?.data || record?.user || response, 0),
@@ -267,10 +288,12 @@ export const createUser = async (payload: CreateUserPayload) => {
 
     if (createdUser.id > 0) {
       try {
+        console.log("[UsersService] Attempting initial update for user:", createdUser.id);
         const updatedUser = await updateUser(createdUser.id, payload);
         persistUser(updatedUser);
         return updatedUser;
       } catch (error) {
+        console.error("[UsersService] Initial update failed:", error);
         if (!isRecoverableApiError(error)) {
           throw error;
         }
@@ -280,6 +303,7 @@ export const createUser = async (payload: CreateUserPayload) => {
     persistUser(createdUser);
     return createdUser;
   } catch (error) {
+    console.error("[UsersService] Create user failed:", error);
     if (isRecoverableApiError(error)) {
       return createLocalUser(payload);
     }

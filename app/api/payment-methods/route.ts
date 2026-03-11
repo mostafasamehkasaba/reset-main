@@ -20,34 +20,45 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const payload = asRecord(await request.json().catch(() => null)) || {};
-  const name =
-    (typeof payload.name === "string" && payload.name.trim()) ||
-    (typeof payload.method_name === "string" && payload.method_name.trim()) ||
-    "";
+  try {
+    const payload = asRecord(await request.json().catch(() => null)) || {};
+    const name =
+      (typeof payload.name === "string" && payload.name.trim()) ||
+      (typeof payload.method_name === "string" && payload.method_name.trim()) ||
+      "";
 
-  if (!name) {
+    if (!name) {
+      return NextResponse.json(
+        { message: "اسم وسيلة الدفع مطلوب." },
+        { status: 422 }
+      );
+    }
+
+    const method = await createStoredPaymentMethod({
+      name,
+      type:
+        (typeof payload.type === "string" && payload.type.trim()) ||
+        (typeof payload.method_type === "string" && payload.method_type.trim()) ||
+        "",
+      currency:
+        (typeof payload.currency === "string" && payload.currency.trim()) ||
+        (typeof payload.currency_code === "string" && payload.currency_code.trim()) ||
+        "OMR",
+      desc:
+        (typeof payload.desc === "string" && payload.desc.trim()) ||
+        (typeof payload.description === "string" && payload.description.trim()) ||
+        "-",
+    });
+
+    return NextResponse.json({ data: method }, { status: 201 });
+  } catch (error) {
+    console.error("[API] POST /api/payment-methods failed:", error);
     return NextResponse.json(
-      { message: "اسم وسيلة الدفع مطلوب." },
-      { status: 422 }
+      {
+        message: "حدث خطأ داخلي أثناء إنشاء وسيلة الدفع.",
+        error: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
     );
   }
-
-  const method = await createStoredPaymentMethod({
-    name,
-    type:
-      (typeof payload.type === "string" && payload.type.trim()) ||
-      (typeof payload.method_type === "string" && payload.method_type.trim()) ||
-      "",
-    currency:
-      (typeof payload.currency === "string" && payload.currency.trim()) ||
-      (typeof payload.currency_code === "string" && payload.currency_code.trim()) ||
-      "OMR",
-    desc:
-      (typeof payload.desc === "string" && payload.desc.trim()) ||
-      (typeof payload.description === "string" && payload.description.trim()) ||
-      "-",
-  });
-
-  return NextResponse.json({ data: method }, { status: 201 });
 }

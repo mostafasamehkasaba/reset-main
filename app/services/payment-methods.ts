@@ -65,8 +65,11 @@ const getMessageFromPayload = (payload: unknown) => {
   const record = asRecord(payload);
   if (!record) return null;
 
-  if (typeof record.message === "string" && record.message.trim()) {
-    return record.message.trim();
+  const candidates = [record.message, record.error, record.details, record.reason];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate.trim();
+    }
   }
 
   return null;

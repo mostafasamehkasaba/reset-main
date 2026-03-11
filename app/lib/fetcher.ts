@@ -192,6 +192,12 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
+    if (response.status === 422) {
+      console.error("[Fetcher] Validation Error (422):", JSON.stringify(payload, null, 2));
+    } else {
+      console.error(`[Fetcher] Request failed (${response.status}):`, payload);
+    }
+
     const message =
       getMessageFromPayload(payload) ||
       (response.status >= 500

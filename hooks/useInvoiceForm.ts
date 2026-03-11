@@ -201,6 +201,30 @@ const toDateInputValue = (value: unknown, fallback = "") => {
   return parsed.toISOString().slice(0, 10);
 };
 
+const normalizeCurrencyCode = (value: string) => {
+  const normalized = value.trim().toUpperCase();
+  if (normalized.length === 3 && /^[A-Z]{3}$/.test(normalized)) {
+    return normalized;
+  }
+
+  if (value.includes("سعود")) {
+    return "SAR";
+  }
+
+  if (value.includes("دولار")) {
+    return "USD";
+  }
+
+  if (value.includes("جنيه") || value.includes("مصري")) {
+    return "EGP";
+  }
+
+  if (value.includes("قطر")) {
+    return "QAR";
+  }
+
+  return FALLBACK_CURRENCY;
+};
 
 const normalizePaymentMethod = (value: unknown): InvoiceEditorPaymentMethod => {
   const normalized = toText(value, "").trim().toLowerCase();
@@ -1199,13 +1223,20 @@ export function useInvoiceForm(invoiceId: string): UseInvoiceFormResult {
         redirectTimeoutRef.current = window.setTimeout(() => {
           router.push("/invoices");
         }, 1200);
+      } else {
+        persistLastInvoiceSequence(sequence);
+        const nextSequence = sequence + 1;
+        const nextInvoiceNumber = formatInvoiceNumber(nextSequence);
+        setSequence(nextSequence);
+        setNextItemId(2);
+        setForm(
+          getDefaultForm(
+            nextInvoiceNumber,
+            settings.defaultCurrency || form.currency,
+            settings.invoiceNotes || emptySettings.invoiceNotes
+          )
+        );
         setSaveMessage(`تم حفظ الفاتورة ${savedInvoiceNumber} بنجاح.`);
-        if (redirectTimeoutRef.current !== null) {
-          window.clearTimeout(redirectTimeoutRef.current);
-        }
-        redirectTimeoutRef.current = window.setTimeout(() => {
-          router.push("/invoices");
-        }, 1200);
       }
     } catch (error) {
       setSaveError(getErrorMessage(error, "تعذر حفظ الفاتورة."));
