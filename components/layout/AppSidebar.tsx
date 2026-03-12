@@ -19,6 +19,9 @@ import {
   Truck,
   Users,
   X,
+  Building2,
+  Coins,
+  Ruler,
 } from "lucide-react";
 import { useSidebar } from "@/app/components/SidebarContext";
 import type { SidebarProps } from "@/app/types";
@@ -49,6 +52,10 @@ const itemsAfterCategories: SidebarNavItem[] = [
   { label: "العملاء", href: "/projects-pages/clients", icon: Users },
   { label: "المستخدمين", href: "/projects-pages/users", icon: Users },
   { label: "الموردين", href: "/projects-pages/Suppliers", icon: Truck },
+  { label: "المندوبين", href: "/projects-pages/delegates", icon: Users },
+  { label: "العملات", href: "/projects-pages/currencies", icon: Coins },
+  { label: "وحدات قياس", href: "/projects-pages/products/units", icon: Ruler },
+  { label: "الفروع", href: "/branches", icon: Building2 },
   { label: "الإعدادات", href: "/projects-pages/settings", icon: Settings },
   { label: "البريد", href: "/projects-pages/mail", icon: Mail },
   { label: "حول", href: "/projects-pages/about", icon: Info },

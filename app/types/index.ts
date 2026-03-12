@@ -7,6 +7,10 @@ export type SidebarLabel =
   | "المستخدمين"
   | "التصنيفات"
   | "الموردين"
+  | "الفروع"
+  | "المندوبين"
+  | "العملات"
+  | "وحدات قياس"
   | "الإعدادات"
   | "البريد"
   | "حول";
@@ -174,4 +178,35 @@ export type Invoice = {
   date: string;
   dueDate: string;
   client: string;
+};
+
+export type Branch = {
+  id: number;
+  name: string;
+  address: string;
+  phone: string;
+  manager: string;
+};
+
+export type Delegate = {
+  id: number;
+  name: string;
+  phone: string;
+  email: string;
+  region: string;
+  status: EntityStatus;
+};
+
+export type Currency = {
+  id: number;
+  name: string;
+  symbol: string;
+  code: string;
+  isDefault: boolean;
+};
+
+export type ProductUnit = {
+  id: number;
+  name: string;
+  isDefault: boolean;
 };

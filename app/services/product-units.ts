@@ -1,117 +1,79 @@
-import { ApiError } from "../lib/fetcher";
+import {
+  loadStoredValue,
+  saveStoredValue,
+  getNextNumericId,
+} from "../lib/local-fallback";
+import type { ProductUnit } from "../types";
 
-export type ProductUnitOption = {
-  id: number;
-  name: string;
-  createdAt: string;
-  isDefault: boolean;
-};
+const STORAGE_KEY = "product_units_data";
 
-const asRecord = (value: unknown): Record<string, unknown> | null => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return null;
+// Fallback to initial seeds if empty
+const INITIAL_UNITS: ProductUnit[] = [
+  { id: 1, name: "قطعة", isDefault: true },
+  { id: 2, name: "كيلو", isDefault: false },
+  { id: 3, name: "علبة", isDefault: false },
+];
+
+const normalizeUnit = (val: any): ProductUnit => ({
+  id: Number(val.id) || 0,
+  name: String(val.name || ""),
+  isDefault: Boolean(val.isDefault),
+});
+
+export const listProductUnits = async (): Promise<ProductUnit[]> => {
+  const stored = loadStoredValue<ProductUnit[]>(STORAGE_KEY, [], (val) =>
+    Array.isArray(val) ? val.map(normalizeUnit) : []
+  );
+  if (stored.length === 0) {
+    saveStoredValue(STORAGE_KEY, INITIAL_UNITS);
+    return INITIAL_UNITS;
   }
-
-  return value as Record<string, unknown>;
+  return stored;
 };
 
-const getText = (...values: unknown[]) => {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return "";
+export const getProductUnit = async (id: number): Promise<ProductUnit | null> => {
+  const units = await listProductUnits();
+  return units.find((u) => u.id === id) || null;
 };
 
-const getNumber = (...values: unknown[]) => {
-  for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value)) {
-      return value;
-    }
-
-    if (typeof value === "string" && value.trim()) {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) {
-        return parsed;
-      }
-    }
-  }
-
-  return 0;
-};
-
-const normalizeUnit = (input: unknown, index: number): ProductUnitOption => {
-  const record = asRecord(input) || {};
-
-  return {
-    id: Math.floor(getNumber(record.id, index + 1)),
-    name: getText(record.name, record.unit_name, `وحدة ${index + 1}`),
-    createdAt: getText(record.createdAt, record.created_at, "-"),
-    isDefault: Boolean(record.isDefault),
+export const createProductUnit = async (data: Omit<ProductUnit, "id">): Promise<ProductUnit> => {
+  const units = await listProductUnits();
+  const newUnit: ProductUnit = {
+    ...data,
+    id: getNextNumericId(units, (u) => u.id),
   };
-};
 
-const extractCollection = (payload: unknown): unknown[] => {
-  if (Array.isArray(payload)) {
-    return payload;
+  if (newUnit.isDefault) {
+    units.forEach((u) => (u.isDefault = false));
   }
 
-  const record = asRecord(payload);
-  if (!record) {
-    return [];
-  }
-
-  const candidates = [record.data, record.units, record.items, record.results];
-  for (const candidate of candidates) {
-    if (Array.isArray(candidate)) {
-      return candidate;
-    }
-  }
-
-  return [];
+  const updatedUnits = [...units, newUnit];
+  saveStoredValue(STORAGE_KEY, updatedUnits);
+  return newUnit;
 };
 
-const localApiRequest = async <T>(endpoint: string, options: RequestInit = {}): Promise<T> => {
-  const response = await fetch(endpoint, {
-    ...options,
-    headers: {
-      Accept: "application/json",
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(options.headers || {}),
-    },
-  });
+export const updateProductUnit = async (
+  id: number,
+  data: Partial<Omit<ProductUnit, "id">>
+): Promise<ProductUnit> => {
+  const units = await listProductUnits();
 
-  const contentType = response.headers.get("content-type") || "";
-  const payload =
-    response.status === 204
-      ? null
-      : contentType.includes("application/json")
-        ? await response.json()
-        : await response.text();
-
-  if (!response.ok) {
-    const message =
-      (typeof payload === "string" && payload.trim()) ||
-      (asRecord(payload)?.message as string | undefined) ||
-      `فشل الطلب (${response.status}).`;
-    throw new ApiError(message, response.status, payload);
+  if (data.isDefault) {
+    units.forEach((u) => (u.isDefault = false));
   }
 
-  return payload as T;
+  const index = units.findIndex((u) => u.id === id);
+  if (index === -1) throw new Error("Unit not found");
+
+  const updatedUnit = { ...units[index], ...data };
+  units[index] = updatedUnit;
+
+  saveStoredValue(STORAGE_KEY, units);
+  return updatedUnit;
 };
 
-export const listProductUnits = async () => {
-  const payload = await localApiRequest<unknown>("/api/product-units");
-  return extractCollection(payload).map((item, index) => normalizeUnit(item, index));
-};
-
-export const createProductUnit = async (name: string) => {
-  const payload = await localApiRequest<unknown>("/api/product-units", {
-    method: "POST",
-    body: JSON.stringify({ name }),
-  });
-  const record = asRecord(payload);
-  return normalizeUnit(record?.data || record?.unit || payload, 0);
+export const deleteProductUnit = async (unit: ProductUnit): Promise<void> => {
+  const units = await listProductUnits();
+  const filtered = units.filter((u) => u.id !== unit.id);
+  saveStoredValue(STORAGE_KEY, filtered);
 };
