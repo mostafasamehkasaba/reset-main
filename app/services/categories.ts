@@ -278,28 +278,7 @@ export const listCategories = async () => {
     console.groupEnd();
     const deletedKeys = loadDeletedCategoryKeys();
     
-    // Smart merge Main Categories
-    const mainMap = new Map<string | number, MainCategory>();
-    // First, add all remote categories
-    remote.mainCategories.forEach(c => {
-      const isDeleted = deletedKeys.has(String(c.id)) || (c.backendId && deletedKeys.has(c.backendId)) || deletedKeys.has(c.name.trim().toLowerCase());
-      if (!isDeleted) mainMap.set(c.id, c);
-    });
-    // Then, add local ones ONLY if they don't match a remote one by backendId or name
-    local.mainCategories.forEach(localCat => {
-      const isDeleted = deletedKeys.has(String(localCat.id)) || (localCat.backendId && deletedKeys.has(localCat.backendId)) || deletedKeys.has(localCat.name.trim().toLowerCase());
-      if (isDeleted) return;
-
-      const exists = remote.mainCategories.find(remoteCat => 
-        (localCat.backendId && remoteCat.backendId === localCat.backendId) ||
-        (remoteCat.name.trim().toLowerCase() === localCat.name.trim().toLowerCase())
-      );
-      if (!exists) {
-        mainMap.set(localCat.id, localCat);
-      }
-    });
-
-    // Smart merge Sub Categories
+    // 1. Smart merge Sub Categories (Build this first for exclusion)
     const subMap = new Map<string | number, SubCategory>();
     remote.subCategories.forEach(s => {
       const isDeleted = deletedKeys.has(String(s.id)) || (s.backendId && deletedKeys.has(s.backendId)) || deletedKeys.has(s.name.trim().toLowerCase());
@@ -319,6 +298,41 @@ export const listCategories = async () => {
       }
     });
 
+    const knownSubNames = new Set(Array.from(subMap.values()).map(s => s.name.trim().toLowerCase()));
+
+    // 2. Smart merge Main Categories (With exclusion)
+    const mainMap = new Map<string | number, MainCategory>();
+    // First, add all remote categories
+    remote.mainCategories.forEach(c => {
+      const isDeleted = deletedKeys.has(String(c.id)) || (c.backendId && deletedKeys.has(c.backendId)) || deletedKeys.has(c.name.trim().toLowerCase());
+      if (isDeleted) return;
+
+      // Exclusion: If it's already a subcategory, don't add to mainMap
+      const isActuallySub = subMap.has(c.id) || (c.backendId && subMap.has(c.backendId)) || knownSubNames.has(c.name.trim().toLowerCase());
+      if (isActuallySub) {
+        console.warn(`[CategoriesService] Mutual Exclusivity: Moving '${c.name}' from Main to Sub list.`);
+        return;
+      }
+
+      mainMap.set(c.id, c);
+    });
+    // Then, add local ones
+    local.mainCategories.forEach(localCat => {
+      const isDeleted = deletedKeys.has(String(localCat.id)) || (localCat.backendId && deletedKeys.has(localCat.backendId)) || deletedKeys.has(localCat.name.trim().toLowerCase());
+      if (isDeleted) return;
+
+      const isActuallySub = subMap.has(localCat.id) || (localCat.backendId && subMap.has(localCat.backendId)) || knownSubNames.has(localCat.name.trim().toLowerCase());
+      if (isActuallySub) return;
+
+      const exists = remote.mainCategories.find(remoteCat => 
+        (localCat.backendId && remoteCat.backendId === localCat.backendId) ||
+        (remoteCat.name.trim().toLowerCase() === localCat.name.trim().toLowerCase())
+      );
+      if (!exists) {
+        mainMap.set(localCat.id, localCat);
+      }
+    });
+
     const mergedCategories = {
       mainCategories: Array.from(mainMap.values()),
       subCategories: Array.from(subMap.values())
@@ -329,7 +343,20 @@ export const listCategories = async () => {
       subCategories: mergedCategories.subCategories.map(s => ({ ...s, isLocal: !s.backendId })),
     });
 
-    // Distribute Sub-categories to Main Categories for internal use if needed, 
+    // Self-healing: Update 'local' persistence if it was corrupted (duplicates between lists)
+    const finalLocalMain = local.mainCategories.filter(lc => {
+      const isSub = subMap.has(lc.id) || (lc.backendId && subMap.has(lc.backendId)) || knownSubNames.has(lc.name.trim().toLowerCase());
+      return !isSub;
+    });
+    if (finalLocalMain.length !== local.mainCategories.length) {
+      console.warn("[CategoriesService] Self-healing: Cleaned up corrupted Main list in Storage.");
+      saveLocalCategories({
+        mainCategories: finalLocalMain,
+        subCategories: Array.from(subMap.values())
+      });
+    }
+
+    // Distribute Sub-categories to Main Categories for internal use if needed,
     // but the UI expects a flat {mainCategories, subCategories} response.
     const finalMain = mergedCategories.mainCategories.map((main) => ({
       ...main,
