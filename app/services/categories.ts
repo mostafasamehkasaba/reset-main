@@ -94,6 +94,8 @@ const normalizeMainCategory = (input: unknown, index: number): MainCategory => {
     products: Math.floor(
       getFirstNumber(record.products, record.products_count, record.items_count, 0)
     ),
+    isLocal: record.isLocal === true || !backendId,
+    subCategories: [],
   };
 };
 
@@ -112,10 +114,12 @@ const normalizeSubCategory = (
     backendId,
     name: getFirstText(record.name, record.category_name, `تصنيف فرعي ${index + 1}`),
     mainCategoryId,
+    mainCategoryName: getFirstText(record.main_category_name, record.mainCategoryName),
     status: normalizeStatus(record.status ?? record.state),
     products: Math.floor(
       getFirstNumber(record.products, record.products_count, record.items_count, 0)
     ),
+    isLocal: record.isLocal === true || !backendId,
   };
 };
 
@@ -315,24 +319,49 @@ export const listCategories = async () => {
       }
     });
 
-    const merged = {
+    const mergedCategories = {
       mainCategories: Array.from(mainMap.values()),
       subCategories: Array.from(subMap.values())
     };
 
-    saveLocalCategories(merged);
-    return merged;
+    saveLocalCategories({
+      mainCategories: mergedCategories.mainCategories.map(m => ({ ...m, isLocal: !m.backendId })),
+      subCategories: mergedCategories.subCategories.map(s => ({ ...s, isLocal: !s.backendId })),
+    });
+
+    // Distribute Sub-categories to Main Categories for internal use if needed, 
+    // but the UI expects a flat {mainCategories, subCategories} response.
+    const finalMain = mergedCategories.mainCategories.map((main) => ({
+      ...main,
+      subCategories: mergedCategories.subCategories.filter((sub: SubCategory) => {
+        if (sub.mainCategoryId === main.id) return true;
+        if (main.backendId && sub.mainCategoryId === Number(main.backendId)) return true;
+        if (sub.mainCategoryName && main.name && 
+            sub.mainCategoryName.trim().toLowerCase() === main.name.trim().toLowerCase()) {
+          return true;
+        }
+        return false;
+      }),
+    }));
+
+    return {
+      mainCategories: finalMain,
+      subCategories: mergedCategories.subCategories
+    };
   } catch (error) {
     console.error("[CategoriesService] List categories failed:", error);
-    // Be very aggressive with local fallback: 
-    // If it's a server error (500), network error, OR 404 (endpoint missing), return local.
+    const local = loadLocalCategories();
+    // Wrap local in the expected structure if necessary
     const isSilenced =
       isRecoverableApiError(error) ||
       (error instanceof ApiError && [404, 405].includes(error.status));
 
     if (isSilenced) {
       console.warn("[CategoriesService] API Unavailable, using local cache.");
-      return local;
+      return {
+        mainCategories: local.mainCategories,
+        subCategories: local.subCategories
+      };
     }
 
     throw error;
@@ -388,6 +417,7 @@ export const createSubCategory = async (payload: SubCategoryPayload) => {
       {
         ...buildSubPayload(payload),
         ...createdRecord,
+        isLocal: false, // It's from server
       },
       getRemoteParentId(createdRecord) || payload.mainCategoryId,
       Date.now()
@@ -402,9 +432,20 @@ export const createSubCategory = async (payload: SubCategoryPayload) => {
     return created;
   } catch (error) {
     if (isRecoverableApiError(error)) {
-      const local = loadLocalCategories();
-      const created = normalizeSubCategory({ ...buildSubPayload(payload), id: Date.now() }, payload.mainCategoryId, local.subCategories.length);
-      saveLocalCategories({ ...local, subCategories: [created, ...local.subCategories] });
+      const localState = loadLocalCategories();
+      const parent = localState.mainCategories.find(m => m.id === payload.mainCategoryId || (m.backendId && Number(m.backendId) === payload.mainCategoryId));
+      
+      const created = normalizeSubCategory(
+        { 
+          ...buildSubPayload(payload), 
+          id: Date.now(),
+          isLocal: true,
+          mainCategoryName: parent?.name
+        }, 
+        payload.mainCategoryId, 
+        localState.subCategories.length
+      );
+      saveLocalCategories({ ...localState, subCategories: [created, ...localState.subCategories] });
       return created;
     }
     throw error;

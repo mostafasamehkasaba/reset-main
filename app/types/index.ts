@@ -83,6 +83,8 @@ export type MainCategory = {
   code: string;
   status: CategoryStatus;
   products: number;
+  isLocal?: boolean;
+  subCategories?: SubCategory[];
 };
 
 export type SubCategory = {
@@ -90,8 +92,10 @@ export type SubCategory = {
   backendId?: string;
   name: string;
   mainCategoryId: number; // This should ideally use backendId of parent
+  mainCategoryName?: string;
   status: CategoryStatus;
   products: number;
+  isLocal?: boolean;
 };
 
 export type ClientStats = {

@@ -450,13 +450,20 @@ export default function MainCategoriesPage() {
                             {category.products}
                           </td>
                           <td className="px-4 py-4">
-                            <span
-                              className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
-                                category.status
-                              )}`}
-                            >
-                              {getStatusLabel(category.status)}
-                            </span>
+                            <div className="flex flex-col gap-1 items-start">
+                              <span
+                                className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${getStatusClasses(
+                                  category.status
+                                )}`}
+                              >
+                                {getStatusLabel(category.status)}
+                              </span>
+                              {category.isLocal && (
+                                <span className="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-bold text-indigo-700">
+                                  بانتظار المزامنة
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-4 text-center">
                             <button
@@ -534,6 +541,11 @@ export default function MainCategoriesPage() {
                     <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
                       #{category.id}
                     </span>
+                    {category.isLocal && (
+                      <span className="inline-flex rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[10px] font-bold text-indigo-700">
+                        بانتظار المزامنة
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-5 grid grid-cols-2 gap-3">
