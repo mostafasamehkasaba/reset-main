@@ -163,19 +163,30 @@ const buildSubPayload = (category: SubCategoryPayload) => ({
   status: category.status,
 });
 
-const getRemoteParentId = (record: Record<string, unknown>) =>
-  Math.floor(
-    getFirstNumber(
-      record.parentId,
-      record.parent_id,
-      record.mainCategoryId,
-      record.main_category_id,
-      asRecord(record.parent)?.id,
-      asRecord(record.main_category)?.id,
-      asRecord(record.mainCategory)?.id,
-      0
-    )
+const getRemoteParentId = (record: Record<string, unknown>) => {
+  const ownId = getFirstNumber(record.id);
+  const potentialParent = getFirstNumber(
+    record.parentId,
+    record.parent_id,
+    record.mainCategoryId,
+    record.main_category_id,
+    asRecord(record.parent)?.id,
+    asRecord(record.main_category)?.id,
+    asRecord(record.mainCategory)?.id
   );
+
+  if (potentialParent > 0 && potentialParent !== ownId) {
+    return Math.floor(potentialParent);
+  }
+
+  // Check category_id only if it's clearly a FK (different from its own ID)
+  const categoryId = getFirstNumber(record.category_id);
+  if (categoryId > 0 && categoryId !== ownId) {
+    return Math.floor(categoryId);
+  }
+
+  return 0;
+};
 
 const buildCategoriesResponse = (payload: unknown) => {
   const records = extractCollection(payload);
@@ -187,8 +198,10 @@ const buildCategoriesResponse = (payload: unknown) => {
     const parentId = getRemoteParentId(record);
 
     if (parentId > 0) {
+      console.log(`[CategoriesService] Identified Sub-Category: '${record.name || 'unnamed'}' (ID: ${record.id}, Parent: ${parentId})`);
       subCategories.push(normalizeSubCategory(record, parentId, subCategories.length));
     } else {
+      console.log(`[CategoriesService] Identified Main Category: '${record.name || 'unnamed'}' (ID: ${record.id})`);
       mainCategories.push(normalizeMainCategory(record, mainCategories.length));
     }
 
