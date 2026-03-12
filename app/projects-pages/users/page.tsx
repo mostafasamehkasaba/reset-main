@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
@@ -271,10 +271,14 @@ export default function UsersPage() {
   const handleUpdateUser = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editUserId || !editUser.name.trim() || !editUser.email.trim() || !editUser.phone.trim()) return;
+
+    const userToUpdate = users.find((u) => u.id === editUserId);
+    if (!userToUpdate) return;
+
     setActionError("");
     setIsSubmitting(true);
     try {
-      const updated = await updateUser(editUserId, { name: editUser.name.trim(), email: editUser.email.trim(), phone: editUser.phone.trim(), role: editUser.role, status: editUser.status });
+      const updated = await updateUser(userToUpdate, { name: editUser.name.trim(), email: editUser.email.trim(), phone: editUser.phone.trim(), role: editUser.role, status: editUser.status });
       setUsers((prev) => prev.map((user) => (user.id === editUserId ? updated : user)));
       setEditUserId(null);
     } catch (error) {
@@ -285,10 +289,13 @@ export default function UsersPage() {
   };
 
   const handleDeleteUser = async (userId: number) => {
+    const userToDelete = users.find((u) => u.id === userId);
+    if (!userToDelete) return;
+
     setActionError("");
     setIsDeleting(true);
     try {
-      await deleteUser(userId);
+      await deleteUser(userToDelete);
       setUsers((prev) => prev.filter((user) => user.id !== userId));
       setDeleteUserId(null);
       setOpenActionId(null);

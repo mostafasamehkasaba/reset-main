@@ -65,6 +65,7 @@ export type UserStatus = EntityStatus;
 
 export type AppUser = {
   id: number;
+  backendId?: string;
   name: string;
   email: string;
   phone: string;
@@ -77,6 +78,7 @@ export type CategoryStatus = EntityStatus;
 
 export type MainCategory = {
   id: number;
+  backendId?: string;
   name: string;
   code: string;
   status: CategoryStatus;
@@ -85,8 +87,9 @@ export type MainCategory = {
 
 export type SubCategory = {
   id: number;
+  backendId?: string;
   name: string;
-  mainCategoryId: number;
+  mainCategoryId: number; // This should ideally use backendId of parent
   status: CategoryStatus;
   products: number;
 };

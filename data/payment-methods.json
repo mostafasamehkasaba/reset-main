@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": 1,
+    "name": "بنك مصر",
+    "type": "cash",
+    "payments": 0,
+    "total": 0,
+    "currency": "OMR",
+    "desc": "-",
+    "createdAt": "2026-03-12T00:00:33.026Z"
+  }
+]
