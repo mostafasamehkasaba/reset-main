@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import Sidebar from "../../components/Sidebar";
@@ -139,13 +139,8 @@ export default function SettingsPage() {
                 <p className="mt-2 text-sm text-slate-500">تحكم في بيانات المنصة والهوية وملاحظات الفواتير من شاشة واحدة واضحة.</p>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                {isEditing ? (
-                  <>
-                    <button type="button" onClick={handleCancelEdit} disabled={isSubmitting} className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60">إلغاء</button>
-                    <button type="button" onClick={() => void handleSave()} disabled={isSubmitting || isLoading} className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60">{isSubmitting ? "جارٍ الحفظ..." : "حفظ"}</button>
-                  </>
-                ) : (
-                  <button type="button" onClick={() => { setErrorMessage(""); setSuccessMessage(""); setIsEditing(true); }} className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">تعديل</button>
+                {!isEditing && (
+                  <button type="button" onClick={() => { setErrorMessage(""); setSuccessMessage(""); setIsEditing(true); }} className="rounded-full bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">تعديل الإعدادات</button>
                 )}
               </div>
             </div>
@@ -192,6 +187,13 @@ export default function SettingsPage() {
               </section>
             </aside>
           </div>
+
+          {isEditing && (
+            <div className="mt-8 flex items-center justify-end gap-3 border-t border-slate-200 pt-6">
+              <button type="button" onClick={handleCancelEdit} disabled={isSubmitting} className="min-w-[120px] rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:opacity-60">إلغاء</button>
+              <button type="button" onClick={() => void handleSave()} disabled={isSubmitting || isLoading} className="min-w-[120px] rounded-full bg-slate-950 px-8 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-slate-800 hover:shadow-slate-200 disabled:opacity-60">{isSubmitting ? "جارٍ الحفظ..." : "حفظ التعديلات"}</button>
+            </div>
+          )}
         </main>
 
         <Sidebar activeLabel="الإعدادات" />
