@@ -252,11 +252,10 @@ const saveDeletedCategoryKeys = (keys: Set<string>) => {
   window.localStorage.setItem(CATEGORIES_DELETED_KEY, JSON.stringify(Array.from(keys)));
 };
 
-const trackDeletedCategory = (id: number, backendId?: string, name?: string) => {
+const trackDeletedCategory = (id: number, backendId?: string) => {
   const keys = loadDeletedCategoryKeys();
   keys.add(String(id));
   if (backendId) keys.add(backendId);
-  if (name) keys.add(name.trim().toLowerCase());
   saveDeletedCategoryKeys(keys);
 };
 
@@ -291,47 +290,86 @@ export const listCategories = async () => {
     console.groupEnd();
     const deletedKeys = loadDeletedCategoryKeys();
     
-    // 1. Smart merge Sub Categories (Build this first for exclusion)
+    // 1. Smart merge Sub Categories
     const subMap = new Map<string | number, SubCategory>();
     remote.subCategories.forEach(s => {
-      const isDeleted = deletedKeys.has(String(s.id)) || (s.backendId && deletedKeys.has(s.backendId)) || deletedKeys.has(s.name.trim().toLowerCase());
-      if (!isDeleted) subMap.set(s.id, s);
+      const isDeleted = deletedKeys.has(String(s.id)) || (s.backendId && deletedKeys.has(s.backendId));
+      if (!isDeleted) {
+        subMap.set(s.id, s);
+      } else {
+        console.log(`[CategoriesService] Skipping deleted remote sub: ${s.name} (ID: ${s.id})`);
+      }
     });
+
     local.subCategories.forEach(localSub => {
-      const isDeleted = deletedKeys.has(String(localSub.id)) || (localSub.backendId && deletedKeys.has(localSub.backendId)) || deletedKeys.has(localSub.name.trim().toLowerCase());
+      const isDeleted = deletedKeys.has(String(localSub.id)) || (localSub.backendId && deletedKeys.has(localSub.backendId));
       if (isDeleted) return;
 
-      const exists = remote.subCategories.find(remoteSub => 
-        (localSub.backendId && remoteSub.backendId === localSub.backendId) ||
-        (remoteSub.name.trim().toLowerCase() === localSub.name.trim().toLowerCase() && 
-         remoteSub.mainCategoryId === localSub.mainCategoryId)
-      );
+      const exists = remote.subCategories.find(remoteSub => {
+        // Match by backendId
+        if (localSub.backendId && remoteSub.backendId === localSub.backendId) return true;
+        
+        // Match by Name AND (Local Parent ID OR Parent Name)
+        const nameMatch = remoteSub.name.trim().toLowerCase() === localSub.name.trim().toLowerCase();
+        if (!nameMatch) return false;
+
+        const parentMatch = 
+          remoteSub.mainCategoryId === localSub.mainCategoryId ||
+          (localSub.mainCategoryName && remoteSub.mainCategoryName && 
+           localSub.mainCategoryName.trim().toLowerCase() === remoteSub.mainCategoryName.trim().toLowerCase());
+        
+        return parentMatch;
+      });
+
       if (!exists) {
+        console.log(`[CategoriesService] Keeping local-only sub: ${localSub.name} (ID: ${localSub.id})`);
         subMap.set(localSub.id, localSub);
       }
     });
 
     const knownSubNames = new Set(Array.from(subMap.values()).map(s => s.name.trim().toLowerCase()));
+    
+    // 1b. Rescue misclassified subcategories
+    // If a remote category is labeled as 'Main' (in remote.mainCategories) 
+    // but it matches a local subcategory by name, rescue it!
+    remote.mainCategories.forEach(remoteCat => {
+      const nameKey = remoteCat.name.trim().toLowerCase();
+      const localMatches = local.subCategories.filter(ls => ls.name.trim().toLowerCase() === nameKey);
+      
+      if (localMatches.length > 0) {
+        // Find the best parent match or take the first one
+        const localSub = localMatches[0]; 
+        console.warn(`[CategoriesService] Rescue Operation: Re-classifying ${remoteCat.name} as subcategory of ${localSub.mainCategoryName || localSub.mainCategoryId}`);
+        
+        const rescued = normalizeSubCategory(
+          { ...remoteCat, main_category_id: localSub.mainCategoryId, mainCategoryName: localSub.mainCategoryName },
+          localSub.mainCategoryId,
+          subMap.size
+        );
+        subMap.set(rescued.id, rescued);
+        knownSubNames.add(nameKey);
+      }
+    });
 
-    // 2. Smart merge Main Categories (With exclusion)
+    console.log(`[CategoriesService] Total Sub-Categories after rescue: ${subMap.size}`);
+
+    // 2. Smart merge Main Categories
     const mainMap = new Map<string | number, MainCategory>();
-    // First, add all remote categories
     remote.mainCategories.forEach(c => {
-      const isDeleted = deletedKeys.has(String(c.id)) || (c.backendId && deletedKeys.has(c.backendId)) || deletedKeys.has(c.name.trim().toLowerCase());
+      const isDeleted = deletedKeys.has(String(c.id)) || (c.backendId && deletedKeys.has(c.backendId));
       if (isDeleted) return;
 
-      // Exclusion: If it's already a subcategory, don't add to mainMap
       const isActuallySub = subMap.has(c.id) || (c.backendId && subMap.has(c.backendId)) || knownSubNames.has(c.name.trim().toLowerCase());
       if (isActuallySub) {
-        console.warn(`[CategoriesService] Mutual Exclusivity: Moving '${c.name}' from Main to Sub list.`);
+        console.warn(`[CategoriesService] Mirror Fix: ${c.name} is a subcategory, hiding from main list.`);
         return;
       }
 
       mainMap.set(c.id, c);
     });
-    // Then, add local ones
+
     local.mainCategories.forEach(localCat => {
-      const isDeleted = deletedKeys.has(String(localCat.id)) || (localCat.backendId && deletedKeys.has(localCat.backendId)) || deletedKeys.has(localCat.name.trim().toLowerCase());
+      const isDeleted = deletedKeys.has(String(localCat.id)) || (localCat.backendId && deletedKeys.has(localCat.backendId));
       if (isDeleted) return;
 
       const isActuallySub = subMap.has(localCat.id) || (localCat.backendId && subMap.has(localCat.backendId)) || knownSubNames.has(localCat.name.trim().toLowerCase());
@@ -342,6 +380,7 @@ export const listCategories = async () => {
         (remoteCat.name.trim().toLowerCase() === localCat.name.trim().toLowerCase())
       );
       if (!exists) {
+        console.log(`[CategoriesService] Keeping local-only main: ${localCat.name} (ID: ${localCat.id})`);
         mainMap.set(localCat.id, localCat);
       }
     });
@@ -591,7 +630,7 @@ export const updateSubCategory = async (categoryId: number, payload: SubCategory
 export const deleteMainCategory = async (categoryId: number) => {
   const local = loadLocalCategories();
   const target = local.mainCategories.find(c => c.id === categoryId);
-  trackDeletedCategory(categoryId, target?.backendId, target?.name);
+  trackDeletedCategory(categoryId, target?.backendId);
   saveLocalCategories({
     ...local,
     mainCategories: local.mainCategories.filter(c => c.id !== categoryId)
@@ -617,7 +656,7 @@ export const deleteMainCategory = async (categoryId: number) => {
 export const deleteSubCategory = async (categoryId: number) => {
   const local = loadLocalCategories();
   const target = local.subCategories.find(c => c.id === categoryId);
-  trackDeletedCategory(categoryId, target?.backendId, target?.name);
+  trackDeletedCategory(categoryId, target?.backendId);
   saveLocalCategories({
     ...local,
     subCategories: local.subCategories.filter(c => c.id !== categoryId)
