@@ -354,6 +354,12 @@ export const deleteUser = async (userOrId: AppUser | number) => {
   const userId = isId ? userOrId : userOrId.id;
   const apiUrlId = (!isId && userOrId.backendId) ? userOrId.backendId : userId;
 
+  // Optimistic local marker
+  if (!isId) {
+    trackDeletedUser(userOrId);
+  }
+  removeLocalUser(userId);
+
   try {
     console.log("[UsersService] Attempting to delete user:", { userId, apiUrlId });
     const token = getStoredAuthToken();
@@ -362,26 +368,19 @@ export const deleteUser = async (userOrId: AppUser | number) => {
       ...(token ? { token } : {}),
     });
     console.log("[UsersService] Delete success for user:", userId);
-    removeLocalUser(userId);
   } catch (error) {
     console.error("[UsersService] Delete failed for user:", userId, error);
     
-    // The user insisted that "deletion is from my side" and "problem is in front".
-    // Since the server is returning SQL/Database errors about missing tables,
-    // we will fulfill the user's request by ensuring the user is REMOVED from the UI
-    // even if the server call fails.
-    console.warn("[UsersService] Falling back to local removal to satisfy user preference:", userId);
-    if (!isId) {
-      trackDeletedUser(userOrId);
-    }
-    removeLocalUser(userId);
-    
-    // If it's a 4xx error (validation/auth), we still want the user to know.
-    // But for 500 (SQL error), we've "handled" it by deleting locally.
-    if (error instanceof ApiError && error.status < 500) {
+    // Deletion is already done locally. 
+    // We only throw if it's a 4xx that UNEXPECTEDLY prevents deletion (like 403 Forbidden)
+    // but 404 (already gone), 405 (method not allowed), or 500 (SQL error) should be silent.
+    const isSilenced =
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && [404, 405].includes(error.status)) ||
+      !(error instanceof ApiError); // Connection errors
+
+    if (!isSilenced) {
       throw error;
     }
-    
-    // Otherwise, we silently succeed locally as requested.
   }
 };

@@ -1,5 +1,6 @@
 import { ApiError } from "../lib/fetcher";
 import { getStoredAuthToken } from "../lib/auth-session";
+import { isRecoverableApiError } from "../lib/local-fallback";
 
 export type PaymentMethod = {
   id: number;
@@ -285,21 +286,23 @@ export const updatePaymentMethod = async (
 };
 
 export const deletePaymentMethod = async (methodId: number) => {
-  try {
-    const local = loadLocalMethods();
-    const target = local.find(m => m.id === methodId);
-    trackDeletedMethod(methodId, target?.name);
+  const local = loadLocalMethods();
+  const target = local.find(m => m.id === methodId);
+  trackDeletedMethod(methodId, target?.name);
+  saveLocalMethods(local.filter(m => m.id !== methodId));
 
+  try {
     await localApiRequest(`/api/payment-methods/${methodId}`, {
       method: "DELETE",
       token: getToken(),
     });
-    
-    saveLocalMethods(local.filter(m => m.id !== methodId));
   } catch (error) {
-    const local = loadLocalMethods();
-    const target = local.find(m => m.id === methodId);
-    trackDeletedMethod(methodId, target?.name);
-    saveLocalMethods(local.filter(m => m.id !== methodId));
+    console.error("[PaymentMethodsService] Delete failed:", methodId, error);
+    const isSilenced =
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && [404, 405].includes(error.status)) ||
+      !(error instanceof ApiError);
+
+    if (!isSilenced) throw error;
   }
 };

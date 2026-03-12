@@ -1,5 +1,5 @@
 import { getStoredAuthToken } from "../lib/auth-session";
-import { apiRequest } from "../lib/fetcher";
+import { ApiError, apiRequest } from "../lib/fetcher";
 import { isRecoverableApiError } from "../lib/local-fallback";
 import type { CategoryStatus, MainCategory, SubCategory } from "../types";
 
@@ -483,61 +483,53 @@ export const updateSubCategory = async (categoryId: number, payload: SubCategory
 };
 
 export const deleteMainCategory = async (categoryId: number) => {
+  const local = loadLocalCategories();
+  const target = local.mainCategories.find(c => c.id === categoryId);
+  trackDeletedCategory(categoryId, target?.backendId, target?.name);
+  saveLocalCategories({
+    ...local,
+    mainCategories: local.mainCategories.filter(c => c.id !== categoryId)
+  });
+
   const token = getStoredAuthToken();
   try {
     await apiRequest(`/api/categories/${categoryId}`, {
       method: "DELETE",
       ...(token ? { token } : {}),
     });
-    
-    const local = loadLocalCategories();
-    const target = local.mainCategories.find(c => c.id === categoryId);
-    trackDeletedCategory(categoryId, target?.backendId, target?.name);
-    saveLocalCategories({
-      ...local,
-      mainCategories: local.mainCategories.filter(c => c.id !== categoryId)
-    });
   } catch (error) {
-    if (isRecoverableApiError(error)) {
-      const local = loadLocalCategories();
-      const target = local.mainCategories.find(c => c.id === categoryId);
-      trackDeletedCategory(categoryId, target?.backendId, target?.name);
-      saveLocalCategories({
-        ...local,
-        mainCategories: local.mainCategories.filter(c => c.id !== categoryId)
-      });
-      return;
-    }
-    throw error;
+    console.error("[CategoriesService] Delete main failed:", categoryId, error);
+    const isSilenced =
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && [404, 405].includes(error.status)) ||
+      !(error instanceof ApiError);
+
+    if (!isSilenced) throw error;
   }
 };
 
 export const deleteSubCategory = async (categoryId: number) => {
+  const local = loadLocalCategories();
+  const target = local.subCategories.find(c => c.id === categoryId);
+  trackDeletedCategory(categoryId, target?.backendId, target?.name);
+  saveLocalCategories({
+    ...local,
+    subCategories: local.subCategories.filter(c => c.id !== categoryId)
+  });
+
   const token = getStoredAuthToken();
   try {
     await apiRequest(`/api/categories/${categoryId}`, {
       method: "DELETE",
       ...(token ? { token } : {}),
     });
-
-    const local = loadLocalCategories();
-    const target = local.subCategories.find(c => c.id === categoryId);
-    trackDeletedCategory(categoryId, target?.backendId, target?.name);
-    saveLocalCategories({
-      ...local,
-      subCategories: local.subCategories.filter(c => c.id !== categoryId)
-    });
   } catch (error) {
-    if (isRecoverableApiError(error)) {
-      const local = loadLocalCategories();
-      const target = local.subCategories.find(c => c.id === categoryId);
-      trackDeletedCategory(categoryId, target?.backendId, target?.name);
-      saveLocalCategories({
-        ...local,
-        subCategories: local.subCategories.filter(c => c.id !== categoryId)
-      });
-      return;
-    }
-    throw error;
+    console.error("[CategoriesService] Delete sub failed:", categoryId, error);
+    const isSilenced =
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && [404, 405].includes(error.status)) ||
+      !(error instanceof ApiError);
+
+    if (!isSilenced) throw error;
   }
 };
