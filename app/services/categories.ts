@@ -154,6 +154,7 @@ const buildSubPayload = (category: SubCategoryPayload) => ({
   category_name: category.name,
   mainCategoryId: category.mainCategoryId,
   main_category_id: category.mainCategoryId,
+  category_id: category.mainCategoryId, // Some backends use this for subcats
   parent_id: category.mainCategoryId,
   status: category.status,
 });
@@ -217,6 +218,30 @@ const buildCategoriesResponse = (payload: unknown) => {
 };
 
 const CATEGORIES_STORAGE_KEY = "reset-main-categories-v2";
+const CATEGORIES_DELETED_KEY = "reset-main-categories-deleted-v1";
+
+const loadDeletedCategoryKeys = (): Set<string> => {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(CATEGORIES_DELETED_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+const saveDeletedCategoryKeys = (keys: Set<string>) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CATEGORIES_DELETED_KEY, JSON.stringify(Array.from(keys)));
+};
+
+const trackDeletedCategory = (id: number, backendId?: string, name?: string) => {
+  const keys = loadDeletedCategoryKeys();
+  keys.add(String(id));
+  if (backendId) keys.add(backendId);
+  if (name) keys.add(name.trim().toLowerCase());
+  saveDeletedCategoryKeys(keys);
+};
 
 const loadLocalCategories = () => {
   if (typeof window === "undefined") return emptyCategoryState;
@@ -245,11 +270,52 @@ export const listCategories = async () => {
     console.log("[CategoriesService] List categories raw payload:", payload);
 
     const remote = buildCategoriesResponse(payload);
+    const deletedKeys = loadDeletedCategoryKeys();
     
-    // Merge local and remote
+    // Smart merge Main Categories
+    const mainMap = new Map<string | number, MainCategory>();
+    // First, add all remote categories
+    remote.mainCategories.forEach(c => {
+      const isDeleted = deletedKeys.has(String(c.id)) || (c.backendId && deletedKeys.has(c.backendId)) || deletedKeys.has(c.name.trim().toLowerCase());
+      if (!isDeleted) mainMap.set(c.id, c);
+    });
+    // Then, add local ones ONLY if they don't match a remote one by backendId or name
+    local.mainCategories.forEach(localCat => {
+      const isDeleted = deletedKeys.has(String(localCat.id)) || (localCat.backendId && deletedKeys.has(localCat.backendId)) || deletedKeys.has(localCat.name.trim().toLowerCase());
+      if (isDeleted) return;
+
+      const exists = remote.mainCategories.find(remoteCat => 
+        (localCat.backendId && remoteCat.backendId === localCat.backendId) ||
+        (remoteCat.name.trim().toLowerCase() === localCat.name.trim().toLowerCase())
+      );
+      if (!exists) {
+        mainMap.set(localCat.id, localCat);
+      }
+    });
+
+    // Smart merge Sub Categories
+    const subMap = new Map<string | number, SubCategory>();
+    remote.subCategories.forEach(s => {
+      const isDeleted = deletedKeys.has(String(s.id)) || (s.backendId && deletedKeys.has(s.backendId)) || deletedKeys.has(s.name.trim().toLowerCase());
+      if (!isDeleted) subMap.set(s.id, s);
+    });
+    local.subCategories.forEach(localSub => {
+      const isDeleted = deletedKeys.has(String(localSub.id)) || (localSub.backendId && deletedKeys.has(localSub.backendId)) || deletedKeys.has(localSub.name.trim().toLowerCase());
+      if (isDeleted) return;
+
+      const exists = remote.subCategories.find(remoteSub => 
+        (localSub.backendId && remoteSub.backendId === localSub.backendId) ||
+        (remoteSub.name.trim().toLowerCase() === localSub.name.trim().toLowerCase() && 
+         remoteSub.mainCategoryId === localSub.mainCategoryId)
+      );
+      if (!exists) {
+        subMap.set(localSub.id, localSub);
+      }
+    });
+
     const merged = {
-      mainCategories: Array.from(new Map([...local.mainCategories, ...remote.mainCategories].map(c => [c.id, c])).values()),
-      subCategories: Array.from(new Map([...local.subCategories, ...remote.subCategories].map(c => [c.id, c])).values())
+      mainCategories: Array.from(mainMap.values()),
+      subCategories: Array.from(subMap.values())
     };
 
     saveLocalCategories(merged);
@@ -425,6 +491,8 @@ export const deleteMainCategory = async (categoryId: number) => {
     });
     
     const local = loadLocalCategories();
+    const target = local.mainCategories.find(c => c.id === categoryId);
+    trackDeletedCategory(categoryId, target?.backendId, target?.name);
     saveLocalCategories({
       ...local,
       mainCategories: local.mainCategories.filter(c => c.id !== categoryId)
@@ -432,6 +500,8 @@ export const deleteMainCategory = async (categoryId: number) => {
   } catch (error) {
     if (isRecoverableApiError(error)) {
       const local = loadLocalCategories();
+      const target = local.mainCategories.find(c => c.id === categoryId);
+      trackDeletedCategory(categoryId, target?.backendId, target?.name);
       saveLocalCategories({
         ...local,
         mainCategories: local.mainCategories.filter(c => c.id !== categoryId)
@@ -451,6 +521,8 @@ export const deleteSubCategory = async (categoryId: number) => {
     });
 
     const local = loadLocalCategories();
+    const target = local.subCategories.find(c => c.id === categoryId);
+    trackDeletedCategory(categoryId, target?.backendId, target?.name);
     saveLocalCategories({
       ...local,
       subCategories: local.subCategories.filter(c => c.id !== categoryId)
@@ -458,6 +530,8 @@ export const deleteSubCategory = async (categoryId: number) => {
   } catch (error) {
     if (isRecoverableApiError(error)) {
       const local = loadLocalCategories();
+      const target = local.subCategories.find(c => c.id === categoryId);
+      trackDeletedCategory(categoryId, target?.backendId, target?.name);
       saveLocalCategories({
         ...local,
         subCategories: local.subCategories.filter(c => c.id !== categoryId)

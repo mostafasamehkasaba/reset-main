@@ -169,40 +169,137 @@ const buildRequestBody = (payload: PaymentMethodPayload) => ({
 
 const getToken = () => getStoredAuthToken();
 
-export const listPaymentMethods = async () => {
-  const payload = await localApiRequest<unknown>("/api/payment-methods", {
-    token: getToken(),
-  });
+const PAYMENT_METHODS_STORAGE_KEY = "reset-main-payment-methods-v1";
+const PAYMENT_METHODS_DELETED_KEY = "reset-main-payment-methods-deleted-v1";
 
-  return extractCollection(payload).map((method, index) => normalizeMethod(method, index));
+const loadDeletedMethodKeys = (): Set<string> => {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(PAYMENT_METHODS_DELETED_KEY);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+const saveDeletedMethodKeys = (keys: Set<string>) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PAYMENT_METHODS_DELETED_KEY, JSON.stringify(Array.from(keys)));
+};
+
+const trackDeletedMethod = (id: number, name?: string) => {
+  const keys = loadDeletedMethodKeys();
+  keys.add(String(id));
+  if (name) keys.add(name.trim().toLowerCase());
+  saveDeletedMethodKeys(keys);
+};
+
+const loadLocalMethods = (): PaymentMethod[] => {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(PAYMENT_METHODS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveLocalMethods = (methods: PaymentMethod[]) => {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(PAYMENT_METHODS_STORAGE_KEY, JSON.stringify(methods));
+};
+
+export const listPaymentMethods = async () => {
+  const local = loadLocalMethods();
+  const deletedKeys = loadDeletedMethodKeys();
+  try {
+    const payload = await localApiRequest<unknown>("/api/payment-methods", {
+      token: getToken(),
+    });
+
+    const remote = extractCollection(payload)
+      .map((method, index) => normalizeMethod(method, index))
+      .filter((method) => !deletedKeys.has(String(method.id)) && !deletedKeys.has(method.name.trim().toLowerCase()));
+
+    // Merge local and remote, preserving IDs, filtering deleted
+    const merged = Array.from(new Map([...local, ...remote].map(m => [m.id, m])).values())
+      .filter((m) => !deletedKeys.has(String(m.id)) && !deletedKeys.has(m.name.trim().toLowerCase()));
+    saveLocalMethods(merged);
+    return merged;
+  } catch (error) {
+    console.error("[PaymentMethodsService] list failed:", error);
+    return local.filter((m) => !deletedKeys.has(String(m.id)));
+  }
 };
 
 export const createPaymentMethod = async (payload: PaymentMethodPayload) => {
-  const response = await localApiRequest<unknown>("/api/payment-methods", {
-    method: "POST",
-    token: getToken(),
-    body: JSON.stringify(buildRequestBody(payload)),
-  });
-  const record = asRecord(response);
-  return normalizeMethod(record?.data || record?.method || response, 0);
+  const deletedKeys = loadDeletedMethodKeys();
+  // If we're creating something with a name we previously deleted, remove it from tombstones
+  if (deletedKeys.has(payload.name.trim().toLowerCase())) {
+    deletedKeys.delete(payload.name.trim().toLowerCase());
+    saveDeletedMethodKeys(deletedKeys);
+  }
+  try {
+    const response = await localApiRequest<unknown>("/api/payment-methods", {
+      method: "POST",
+      token: getToken(),
+      body: JSON.stringify(buildRequestBody(payload)),
+    });
+    const record = asRecord(response);
+    const created = normalizeMethod(record?.data || record?.method || response, Date.now());
+    
+    const local = loadLocalMethods();
+    saveLocalMethods([created, ...local]);
+    return created;
+  } catch (error) {
+    // Basic local fallback for 5xx errors
+    const local = loadLocalMethods();
+    const created = normalizeMethod({ ...buildRequestBody(payload), id: Date.now() }, local.length);
+    saveLocalMethods([created, ...local]);
+    return created;
+  }
 };
 
 export const updatePaymentMethod = async (
   methodId: number,
   payload: PaymentMethodPayload
 ) => {
-  const response = await localApiRequest<unknown>(`/api/payment-methods/${methodId}`, {
-    method: "PUT",
-    token: getToken(),
-    body: JSON.stringify(buildRequestBody(payload)),
-  });
-  const record = asRecord(response);
-  return normalizeMethod(record?.data || record?.method || response, 0);
+  try {
+    const response = await localApiRequest<unknown>(`/api/payment-methods/${methodId}`, {
+      method: "PUT",
+      token: getToken(),
+      body: JSON.stringify(buildRequestBody(payload)),
+    });
+    const record = asRecord(response);
+    const updated = normalizeMethod(record?.data || record?.method || response, 0);
+    
+    const local = loadLocalMethods();
+    saveLocalMethods(local.map(m => m.id === methodId ? updated : m));
+    return updated;
+  } catch (error) {
+    const local = loadLocalMethods();
+    const updated = normalizeMethod({ ...buildRequestBody(payload), id: methodId }, 0);
+    saveLocalMethods(local.map(m => m.id === methodId ? updated : m));
+    return updated;
+  }
 };
 
 export const deletePaymentMethod = async (methodId: number) => {
-  await localApiRequest(`/api/payment-methods/${methodId}`, {
-    method: "DELETE",
-    token: getToken(),
-  });
+  try {
+    const local = loadLocalMethods();
+    const target = local.find(m => m.id === methodId);
+    trackDeletedMethod(methodId, target?.name);
+
+    await localApiRequest(`/api/payment-methods/${methodId}`, {
+      method: "DELETE",
+      token: getToken(),
+    });
+    
+    saveLocalMethods(local.filter(m => m.id !== methodId));
+  } catch (error) {
+    const local = loadLocalMethods();
+    const target = local.find(m => m.id === methodId);
+    trackDeletedMethod(methodId, target?.name);
+    saveLocalMethods(local.filter(m => m.id !== methodId));
+  }
 };

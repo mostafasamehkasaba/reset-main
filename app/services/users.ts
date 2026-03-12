@@ -24,8 +24,26 @@ export type CreateUserPayload = UserPayload & {
 };
 
 const USERS_STORAGE_KEY = "reset-main-users-v1";
+const USERS_DELETED_KEY = "reset-main-users-deleted-v1";
 
 const defaultUsers: AppUser[] = [];
+
+const loadDeletedKeys = (): Set<string> => {
+  const raw = loadStoredValue(USERS_DELETED_KEY, [] as string[], (v) => Array.isArray(v) ? v : []);
+  return new Set(raw);
+};
+
+const saveDeletedKeys = (keys: Set<string>) => {
+  saveStoredValue(USERS_DELETED_KEY, Array.from(keys));
+};
+
+const trackDeletedUser = (user: AppUser) => {
+  const keys = loadDeletedKeys();
+  const key = getUserKey(user);
+  keys.add(key);
+  if (user.backendId) keys.add(user.backendId);
+  saveDeletedKeys(keys);
+};
 
 const asRecord = (value: unknown): Record<string, unknown> | null => {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -245,6 +263,7 @@ const removeLocalUser = (userId: number) => {
 
 export const listUsers = async () => {
   const localUsers = loadLocalUsers();
+  const deletedKeys = loadDeletedKeys();
 
   try {
     const token = getStoredAuthToken();
@@ -252,13 +271,18 @@ export const listUsers = async () => {
       ...(token ? { token } : {}),
     });
     console.log("[UsersService] List users raw payload:", payload);
-    const remoteUsers = extractCollection(payload).map((user, index) => normalizeUser(user, index));
-    const mergedUsers = mergeUniqueByKey(localUsers, remoteUsers, getUserKey);
+    const remoteUsers = extractCollection(payload)
+      .map((user, index) => normalizeUser(user, index))
+      .filter((user) => !deletedKeys.has(getUserKey(user)) && (!user.backendId || !deletedKeys.has(user.backendId)));
+    
+    const mergedUsers = mergeUniqueByKey(localUsers, remoteUsers, getUserKey)
+      .filter((user) => !deletedKeys.has(getUserKey(user)) && (!user.backendId || !deletedKeys.has(user.backendId)));
+    
     saveLocalUsers(mergedUsers);
     return mergedUsers;
   } catch (error) {
     if (isRecoverableApiError(error)) {
-      return localUsers;
+      return localUsers.filter((user) => !deletedKeys.has(getUserKey(user)));
     }
 
     throw error;
@@ -347,6 +371,9 @@ export const deleteUser = async (userOrId: AppUser | number) => {
     // we will fulfill the user's request by ensuring the user is REMOVED from the UI
     // even if the server call fails.
     console.warn("[UsersService] Falling back to local removal to satisfy user preference:", userId);
+    if (!isId) {
+      trackDeletedUser(userOrId);
+    }
     removeLocalUser(userId);
     
     // If it's a 4xx error (validation/auth), we still want the user to know.
