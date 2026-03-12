@@ -411,6 +411,7 @@ export const listCategories = async () => {
 export const createMainCategory = async (payload: MainCategoryPayload) => {
   const token = getStoredAuthToken();
   try {
+    console.log("[CategoriesService] Creating Main Category (Remote)...", payload);
     const response = await apiRequest<unknown>("/api/categories", {
       method: "POST",
       ...(token ? { token } : {}),
@@ -425,6 +426,7 @@ export const createMainCategory = async (payload: MainCategoryPayload) => {
       Date.now()
     );
     
+    console.log("[CategoriesService] Success: Created Main Category (Remote)", created);
     const local = loadLocalCategories();
     saveLocalCategories({
       ...local,
@@ -433,9 +435,11 @@ export const createMainCategory = async (payload: MainCategoryPayload) => {
     
     return created;
   } catch (error) {
+    console.error("[CategoriesService] Error creating main category:", error);
     if (isRecoverableApiError(error)) {
+      console.warn("[CategoriesService] API Unavailable, falling back to local storage for main category.");
       const local = loadLocalCategories();
-      const created = normalizeMainCategory({ ...buildMainPayload(payload), id: Date.now() }, local.mainCategories.length);
+      const created = normalizeMainCategory({ ...buildMainPayload(payload), id: Date.now(), isLocal: true }, local.mainCategories.length);
       saveLocalCategories({ ...local, mainCategories: [created, ...local.mainCategories] });
       return created;
     }
@@ -446,6 +450,7 @@ export const createMainCategory = async (payload: MainCategoryPayload) => {
 export const createSubCategory = async (payload: SubCategoryPayload) => {
   const token = getStoredAuthToken();
   try {
+    console.log("[CategoriesService] Creating Sub-Category (Remote)...", payload);
     const response = await apiRequest<unknown>("/api/categories", {
       method: "POST",
       ...(token ? { token } : {}),
@@ -463,6 +468,7 @@ export const createSubCategory = async (payload: SubCategoryPayload) => {
       Date.now()
     );
 
+    console.log("[CategoriesService] Success: Created Sub-Category (Remote)", created);
     const local = loadLocalCategories();
     saveLocalCategories({
       ...local,
@@ -471,7 +477,9 @@ export const createSubCategory = async (payload: SubCategoryPayload) => {
     
     return created;
   } catch (error) {
+    console.error("[CategoriesService] Error creating sub-category:", error);
     if (isRecoverableApiError(error)) {
+      console.warn("[CategoriesService] API Unavailable, falling back to local storage for sub-category.");
       const localState = loadLocalCategories();
       const parent = localState.mainCategories.find(m => m.id === payload.mainCategoryId || (m.backendId && Number(m.backendId) === payload.mainCategoryId));
       
@@ -495,6 +503,7 @@ export const createSubCategory = async (payload: SubCategoryPayload) => {
 export const updateMainCategory = async (categoryId: number, payload: MainCategoryPayload) => {
   const token = getStoredAuthToken();
   try {
+    console.log(`[CategoriesService] Updating Main Category ${categoryId} (Remote)...`, payload);
     const response = await apiRequest<unknown>(`/api/categories/${categoryId}`, {
       method: "PUT",
       ...(token ? { token } : {}),
@@ -510,6 +519,7 @@ export const updateMainCategory = async (categoryId: number, payload: MainCatego
       0
     );
     
+    console.log(`[CategoriesService] Success: Updated Main Category ${categoryId} (Remote)`, updated);
     const local = loadLocalCategories();
     saveLocalCategories({
       ...local,
@@ -518,15 +528,11 @@ export const updateMainCategory = async (categoryId: number, payload: MainCatego
     
     return updated;
   } catch (error) {
-    console.error("[CategoriesService] Update main failed:", categoryId, error);
-    const isSilenced =
-      isRecoverableApiError(error) ||
-      (error instanceof ApiError && [404, 405].includes(error.status)) ||
-      !(error instanceof ApiError);
-
-    if (isSilenced) {
+    console.error(`[CategoriesService] Error updating main category ${categoryId}:`, error);
+    if (isRecoverableApiError(error)) {
+      console.warn(`[CategoriesService] API Unavailable, falling back to local storage for update of main category ${categoryId}.`);
       const local = loadLocalCategories();
-      const updated = normalizeMainCategory({ ...buildMainPayload(payload), id: categoryId }, 0);
+      const updated = normalizeMainCategory({ ...buildMainPayload(payload), id: categoryId, isLocal: true }, 0);
       saveLocalCategories({
         ...local,
         mainCategories: local.mainCategories.map(c => c.id === categoryId ? updated : c)
@@ -540,6 +546,7 @@ export const updateMainCategory = async (categoryId: number, payload: MainCatego
 export const updateSubCategory = async (categoryId: number, payload: SubCategoryPayload) => {
   const token = getStoredAuthToken();
   try {
+    console.log(`[CategoriesService] Updating Sub-Category ${categoryId} (Remote)...`, payload);
     const response = await apiRequest<unknown>(`/api/categories/${categoryId}`, {
       method: "PUT",
       ...(token ? { token } : {}),
@@ -557,6 +564,7 @@ export const updateSubCategory = async (categoryId: number, payload: SubCategory
       0
     );
 
+    console.log(`[CategoriesService] Success: Updated Sub-Category ${categoryId} (Remote)`, updated);
     const local = loadLocalCategories();
     saveLocalCategories({
       ...local,
@@ -565,15 +573,11 @@ export const updateSubCategory = async (categoryId: number, payload: SubCategory
     
     return updated;
   } catch (error) {
-    console.error("[CategoriesService] Update sub failed:", categoryId, error);
-    const isSilenced =
-      isRecoverableApiError(error) ||
-      (error instanceof ApiError && [404, 405].includes(error.status)) ||
-      !(error instanceof ApiError);
-
-    if (isSilenced) {
+    console.error(`[CategoriesService] Error updating sub-category ${categoryId}:`, error);
+    if (isRecoverableApiError(error)) {
+      console.warn(`[CategoriesService] API Unavailable, falling back to local storage for update of sub-category ${categoryId}.`);
       const local = loadLocalCategories();
-      const updated = normalizeSubCategory({ ...buildSubPayload(payload), id: categoryId }, payload.mainCategoryId, 0);
+      const updated = normalizeSubCategory({ ...buildSubPayload(payload), id: categoryId, isLocal: true }, payload.mainCategoryId, 0);
       saveLocalCategories({
         ...local,
         subCategories: local.subCategories.map(c => c.id === categoryId ? updated : c)

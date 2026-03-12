@@ -61,7 +61,8 @@ export const upsertByKey = <T>(items: T[], nextItem: T, getKey: (item: T) => str
 
 export const isRecoverableApiError = (error: unknown) => {
   if (error instanceof ApiError) {
-    return error.status >= 500;
+    // 5xx (Server error), 404 (Missing endpoint), 405 (Method not allowed), 422 (Validation/SQL error)
+    return error.status >= 500 || [404, 405, 422].includes(error.status);
   }
 
   return error instanceof Error;
