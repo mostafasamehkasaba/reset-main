@@ -170,7 +170,10 @@ const getRemoteParentId = (record: Record<string, unknown>) => {
     record.parent_id,
     record.mainCategoryId,
     record.main_category_id,
+    record.main_id,
+    record.category_id,
     asRecord(record.parent)?.id,
+    asRecord(record.parent_category)?.id,
     asRecord(record.main_category)?.id,
     asRecord(record.mainCategory)?.id
   );
@@ -179,57 +182,56 @@ const getRemoteParentId = (record: Record<string, unknown>) => {
     return Math.floor(potentialParent);
   }
 
-  // Check category_id only if it's clearly a FK (different from its own ID)
-  const categoryId = getFirstNumber(record.category_id);
-  if (categoryId > 0 && categoryId !== ownId) {
-    return Math.floor(categoryId);
-  }
-
   return 0;
 };
 
 const buildCategoriesResponse = (payload: unknown) => {
   const records = extractCollection(payload);
-  const mainCategories: MainCategory[] = [];
   const subCategories: SubCategory[] = [];
+  
+  // First Pass: Identify clear hierarchy and potential main categories
+  const potentialMain: Record<string, unknown>[] = [];
 
-  const processCategory = (item: unknown, depth = 0) => {
+  const processCategory = (item: unknown, inheritedParentId = 0) => {
     const record = asRecord(item) || {};
-    const parentId = getRemoteParentId(record);
+    const parentId = getRemoteParentId(record) || inheritedParentId;
 
     if (parentId > 0) {
-      console.log(`[CategoriesService] Identified Sub-Category: '${record.name || 'unnamed'}' (ID: ${record.id}, Parent: ${parentId})`);
       subCategories.push(normalizeSubCategory(record, parentId, subCategories.length));
     } else {
-      console.log(`[CategoriesService] Identified Main Category: '${record.name || 'unnamed'}' (ID: ${record.id})`);
-      mainCategories.push(normalizeMainCategory(record, mainCategories.length));
+      potentialMain.push(record);
     }
 
-    // Recursively process children if they exist
+    // Process nested children
     const children = extractCollection(record.children || record.subs || record.sub_categories || record.subcategories);
-    if (children.length > 0) {
-      const currentCategoryId = Math.floor(getFirstNumber(record.id, record.category_id, 0));
-      if (currentCategoryId > 0) {
-        children.forEach((child: unknown) => {
-          const childRecord = asRecord(child) || {};
-          // Ensure child has the parent ID if it's missing
-          if (!getRemoteParentId(childRecord)) {
-            (childRecord as any).parent_id = currentCategoryId;
-          }
-          processCategory(childRecord, depth + 1);
-        });
-      } else {
-        // If parent has no ID, just process children normally
-        children.forEach((c: unknown) => processCategory(c, depth + 1));
-      }
-    }
+    const currentId = getFirstNumber(record.id, record.category_id, 0);
+    children.forEach(c => processCategory(c, currentId || 0));
   };
 
-  records.forEach((item: unknown) => processCategory(item));
+  records.forEach(item => processCategory(item));
+
+  // Second Pass: Distinguish actual Main from "Lost Subcategories" by parent name
+  const actualMain: MainCategory[] = [];
+  potentialMain.forEach((record, idx) => actualMain.push(normalizeMainCategory(record, idx)));
+
+  const finalMain: MainCategory[] = [];
+  const actualMainNames = new Map(actualMain.map(m => [m.name.trim().toLowerCase(), m.id]));
+
+  actualMain.forEach((cat, idx) => {
+    const record = potentialMain[idx];
+    const parentName = getFirstText(record.main_category_name, record.parent_name, record.category_name);
+    const parentIdFromName = parentName ? (actualMainNames.get(parentName.trim().toLowerCase()) ?? 0) : 0;
+
+    if (parentIdFromName > 0 && parentIdFromName !== cat.id) {
+      console.warn(`[CategoriesService] Rescue: Re-classified ${cat.name} as subcat of ${parentName}`);
+      subCategories.push(normalizeSubCategory({ ...record, main_category_id: parentIdFromName }, parentIdFromName, subCategories.length));
+    } else {
+      finalMain.push(cat);
+    }
+  });
 
   return { 
-    // Filter out duplicates if any (could happen with recursive processing)
-    mainCategories: Array.from(new Map(mainCategories.map(c => [c.id, c])).values()),
+    mainCategories: Array.from(new Map(finalMain.map(c => [c.id, c])).values()),
     subCategories: Array.from(new Map(subCategories.map(c => [c.id, c])).values())
   };
 };
@@ -273,6 +275,55 @@ const loadLocalCategories = () => {
 const saveLocalCategories = (state: typeof emptyCategoryState) => {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(state));
+};
+
+const backgroundSyncLocalItems = async () => {
+  if (typeof window === "undefined") return;
+  const local = loadLocalCategories();
+  const token = getStoredAuthToken();
+  if (!token) return;
+
+  const localMains = local.mainCategories.filter(c => c.isLocal);
+  const localSubs = local.subCategories.filter(s => s.isLocal);
+
+  if (localMains.length === 0 && localSubs.length === 0) return;
+
+  console.log(`[CategoriesService] Background Sync: Starting for ${localMains.length} mains and ${localSubs.length} subs.`);
+
+  for (const main of localMains) {
+    try {
+      await apiRequest("/api/categories", {
+        method: "POST",
+        token,
+        body: JSON.stringify(buildMainPayload(main)),
+      });
+      console.log(`[CategoriesService] Synced Main: ${main.name}`);
+    } catch (err) {
+      console.error(`[CategoriesService] Sync failed for main ${main.name}:`, err);
+    }
+  }
+
+  for (const sub of localSubs) {
+    try {
+      // Find parent ID safely
+      const parent = local.mainCategories.find(m => m.id === sub.mainCategoryId);
+      const categoryId = parent?.backendId ? Number(parent.backendId) : sub.mainCategoryId;
+
+      await apiRequest("/api/categories", {
+        method: "POST",
+        token,
+        body: JSON.stringify({
+          ...buildSubPayload(sub),
+          category_id: categoryId,
+          parent_id: categoryId,
+          main_category_id: categoryId
+        }),
+      });
+      console.log(`[CategoriesService] Synced Sub: ${sub.name}`);
+    } catch (err) {
+      console.error(`[CategoriesService] Sync failed for sub ${sub.name}:`, err);
+    }
+  }
 };
 
 export const listCategories = async () => {
@@ -394,6 +445,9 @@ export const listCategories = async () => {
       mainCategories: mergedCategories.mainCategories.map(m => ({ ...m, isLocal: !m.backendId })),
       subCategories: mergedCategories.subCategories.map(s => ({ ...s, isLocal: !s.backendId })),
     });
+
+    // Fire non-blocking background sync
+    void backgroundSyncLocalItems();
 
     // Self-healing: Update 'local' persistence if it was corrupted (duplicates between lists)
     const finalLocalMain = local.mainCategories.filter(lc => {
