@@ -267,9 +267,11 @@ export const listCategories = async () => {
     const payload = await apiRequest<unknown>("/api/categories", {
       ...(token ? { token } : {}),
     });
-    console.log("[CategoriesService] List categories raw payload:", payload);
-
+    console.group("[CategoriesService] API Response Debug");
+    console.log("Raw Payload:", payload);
     const remote = buildCategoriesResponse(payload);
+    console.log("Parsed Remote Data:", remote);
+    console.groupEnd();
     const deletedKeys = loadDeletedCategoryKeys();
     
     // Smart merge Main Categories
@@ -322,7 +324,14 @@ export const listCategories = async () => {
     return merged;
   } catch (error) {
     console.error("[CategoriesService] List categories failed:", error);
-    if (isRecoverableApiError(error)) {
+    // Be very aggressive with local fallback: 
+    // If it's a server error (500), network error, OR 404 (endpoint missing), return local.
+    const isSilenced =
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && [404, 405].includes(error.status));
+
+    if (isSilenced) {
+      console.warn("[CategoriesService] API Unavailable, using local cache.");
       return local;
     }
 
@@ -428,7 +437,13 @@ export const updateMainCategory = async (categoryId: number, payload: MainCatego
     
     return updated;
   } catch (error) {
-    if (isRecoverableApiError(error)) {
+    console.error("[CategoriesService] Update main failed:", categoryId, error);
+    const isSilenced =
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && [404, 405].includes(error.status)) ||
+      !(error instanceof ApiError);
+
+    if (isSilenced) {
       const local = loadLocalCategories();
       const updated = normalizeMainCategory({ ...buildMainPayload(payload), id: categoryId }, 0);
       saveLocalCategories({
@@ -469,7 +484,13 @@ export const updateSubCategory = async (categoryId: number, payload: SubCategory
     
     return updated;
   } catch (error) {
-    if (isRecoverableApiError(error)) {
+    console.error("[CategoriesService] Update sub failed:", categoryId, error);
+    const isSilenced =
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && [404, 405].includes(error.status)) ||
+      !(error instanceof ApiError);
+
+    if (isSilenced) {
       const local = loadLocalCategories();
       const updated = normalizeSubCategory({ ...buildSubPayload(payload), id: categoryId }, payload.mainCategoryId, 0);
       saveLocalCategories({

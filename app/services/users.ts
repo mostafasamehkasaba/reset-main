@@ -270,10 +270,13 @@ export const listUsers = async () => {
     const payload = await apiRequest<unknown>("/api/users", {
       ...(token ? { token } : {}),
     });
-    console.log("[UsersService] List users raw payload:", payload);
+    console.group("[UsersService] API Response Debug");
+    console.log("Raw Payload:", payload);
     const remoteUsers = extractCollection(payload)
       .map((user, index) => normalizeUser(user, index))
       .filter((user) => !deletedKeys.has(getUserKey(user)) && (!user.backendId || !deletedKeys.has(user.backendId)));
+    console.log("Parsed Remote Data:", remoteUsers);
+    console.groupEnd();
     
     const mergedUsers = mergeUniqueByKey(localUsers, remoteUsers, getUserKey)
       .filter((user) => !deletedKeys.has(getUserKey(user)) && (!user.backendId || !deletedKeys.has(user.backendId)));
@@ -281,7 +284,13 @@ export const listUsers = async () => {
     saveLocalUsers(mergedUsers);
     return mergedUsers;
   } catch (error) {
-    if (isRecoverableApiError(error)) {
+    console.error("[UsersService] listUsers failed:", error);
+    const isSilenced =
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && [404, 405].includes(error.status));
+
+    if (isSilenced) {
+      console.warn("[UsersService] API Unavailable, using local cache.");
       return localUsers.filter((user) => !deletedKeys.has(getUserKey(user)));
     }
 

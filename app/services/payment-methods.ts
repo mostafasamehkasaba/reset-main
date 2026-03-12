@@ -217,10 +217,13 @@ export const listPaymentMethods = async () => {
     const payload = await localApiRequest<unknown>("/api/payment-methods", {
       token: getToken(),
     });
-
+    console.group("[PaymentMethodsService] API Response Debug");
+    console.log("Raw Payload:", payload);
     const remote = extractCollection(payload)
       .map((method, index) => normalizeMethod(method, index))
       .filter((method) => !deletedKeys.has(String(method.id)) && !deletedKeys.has(method.name.trim().toLowerCase()));
+    console.log("Parsed Remote Data:", remote);
+    console.groupEnd();
 
     // Merge local and remote, preserving IDs, filtering deleted
     const merged = Array.from(new Map([...local, ...remote].map(m => [m.id, m])).values())
@@ -229,7 +232,16 @@ export const listPaymentMethods = async () => {
     return merged;
   } catch (error) {
     console.error("[PaymentMethodsService] list failed:", error);
-    return local.filter((m) => !deletedKeys.has(String(m.id)));
+    const isSilenced =
+      isRecoverableApiError(error) ||
+      (error instanceof ApiError && [404, 405].includes(error.status));
+
+    if (isSilenced) {
+      console.warn("[PaymentMethodsService] API Unavailable, using local cache.");
+      return local.filter((m) => !deletedKeys.has(String(m.id)));
+    }
+
+    throw error;
   }
 };
 
